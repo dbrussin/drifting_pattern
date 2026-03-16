@@ -278,6 +278,7 @@ let state = {
   finalHeadingDeg: null,  // null = auto from wind
   manualHeading: false,
   winds: [],              // [{altFt, dirDeg, speedKts}] sorted ascending
+  surfaceWind: null,      // real 10m AGL observed wind from open-meteo
   pattern: null,          // calculated result
 };
 
@@ -443,12 +444,17 @@ async function fetchWinds() {
     // Build winds array: surface from current, pressure levels from hourly[0]
     const rawWinds = [];
 
-    // Surface (10m AGL ≈ field elev MSL)
-    rawWinds.push({
-      altFt: state.fieldElevFt,
-      dirDeg: Math.round(data.current.winddirection_10m),
-      speedKts: Math.round(data.current.windspeed_10m)
-    });
+      // Surface (10m AGL = real observed value, store separately)
+      state.surfaceWind = {
+        dirDeg: Math.round(data.current.winddirection_10m),
+        speedKts: Math.round(data.current.windspeed_10m)
+      };
+
+      rawWinds.push({
+        altFt: state.fieldElevFt,
+        dirDeg: state.surfaceWind.dirDeg,
+        speedKts: state.surfaceWind.speedKts
+      });
 
     // Pressure levels
     PRESSURE_LEVELS.forEach(p => {
@@ -477,14 +483,13 @@ async function fetchWinds() {
     // Rebuild wind row inputs
     rebuildWindInputs();
 
+    const sw = state.surfaceWind;
     document.getElementById('fetch-status').textContent =
-      `Winds loaded (open-meteo.com) — edit to override`;
+      `Surface: ${sw.dirDeg}° @ ${sw.speedKts}kt (10m AGL) — aloft interpolated — edit to override`;
 
-    // Auto-set final heading from lowest wind
-    if (!state.manualHeading && state.winds[0] && state.winds[0].dirDeg !== null) {
-      // Final is INTO the wind, so heading = wind direction (wind FROM = fly INTO)
-      // Wind direction is "from" so final heading = wind dir
-      state.finalHeadingDeg = state.winds[0].dirDeg;
+    // Auto-set final heading from surface wind
+    if (!state.manualHeading && sw.dirDeg !== null) {
+      state.finalHeadingDeg = sw.dirDeg;
       updateHeadingDisplay(state.finalHeadingDeg);
     }
   } catch(e) {
@@ -524,8 +529,16 @@ function rebuildWindInputs() {
   state.winds.forEach((w, i) => {
     if (rows[i]) {
       const inputs = rows[i].querySelectorAll('input');
-      inputs[0].value = w.dirDeg !== null ? w.dirDeg : '';
-      inputs[1].value = w.speedKts !== null ? w.speedKts : '';
+      // For SFC row (i===0), use real surface wind if available
+      const isSfc = WIND_ALTS_FT[i] === 0;
+      const src = (isSfc && state.surfaceWind) ? state.surfaceWind : w;
+      inputs[0].value = src.dirDeg !== null ? src.dirDeg : '';
+      inputs[1].value = src.speedKts !== null ? src.speedKts : '';
+      if (isSfc && state.surfaceWind) {
+        inputs[0].style.borderColor = 'var(--accent2)';
+        inputs[1].style.borderColor = 'var(--accent2)';
+        rows[i].querySelector('.alt-label').style.color = 'var(--accent2)';
+      }
     }
   });
 }
@@ -581,11 +594,17 @@ function windToVec(fromDeg, speedKts) {
 // Get wind at a given AGL altitude by linear interpolation from state.winds
 function getWindAtAGL(aglFt) {
   const msl = aglFt + state.fieldElevFt;
-  const sorted = state.winds
+  let sorted = state.winds
     .filter(w => w.dirDeg !== null && w.speedKts !== null)
     .sort((a,b) => a.altFt - b.altFt);
+
+  // Replace or prepend real surface wind at 0ft AGL if available
+  if (state.surfaceWind && state.surfaceWind.dirDeg !== null) {
+    sorted = sorted.filter(w => w.altFt !== 0);
+    sorted.unshift({altFt: 0, dirDeg: state.surfaceWind.dirDeg, speedKts: state.surfaceWind.speedKts});
+  }
+
   if (sorted.length === 0) return {n:0, e:0};
-  // convert state.winds altFt (AGL) to MSL for comparison
   const sortedMSL = sorted.map(w => ({...w, mslFt: w.altFt + state.fieldElevFt}));
   const interp = interpolateWind(sortedMSL.map(w => ({altFt: w.mslFt, dirDeg: w.dirDeg, speedKts: w.speedKts})), msl);
   return windToVec(interp.dir, interp.speed);
