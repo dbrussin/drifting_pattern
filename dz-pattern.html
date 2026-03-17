@@ -15,255 +15,258 @@
     --border: #2a2f3a;
     --accent: #e8f44d;
     --accent2: #4df4c8;
-    --danger: #f44d4d;
     --text: #d8dde8;
     --muted: #5a6070;
     --final-color: #e8f44d;
     --base-color: #4df4c8;
     --downwind-color: #f4944d;
-    --track-color: rgba(255,255,255,0.5);
+    --header-h: 48px;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; max-height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Barlow Condensed', sans-serif; }
-
-  #app { display: flex; flex-direction: column; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Barlow Condensed', sans-serif; }
 
   /* HEADER */
   #header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border);
-    flex-shrink: 0; gap: 10px;
+    position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 500;
+    display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
   }
-  #header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+  #header h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; white-space: nowrap; }
   #header h1 span { color: var(--muted); font-weight: 300; }
 
-  .hand-toggle {
-    display: flex; gap: 0; border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  /* DZ SEARCH */
+  #dz-search-wrap { position: relative; flex: 1; min-width: 0; }
+  #dz-search {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
+    padding: 6px 10px; letter-spacing: 0.04em;
   }
+  #dz-search:focus { outline: none; border-color: var(--accent); }
+  #dz-search::placeholder { color: var(--muted); }
+  #dz-dropdown {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    z-index: 2000; max-height: 220px; overflow-y: auto;
+  }
+  #dz-dropdown.open { display: block; }
+  .dz-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .dz-item:last-child { border-bottom: none; }
+  .dz-item:active, .dz-item.selected { background: var(--border); }
+  .dz-item .dz-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .dz-item .dz-loc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  .hand-toggle { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
   .hand-toggle button {
-    padding: 6px 12px; background: transparent; border: none; color: var(--muted);
-    font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
-    letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s;
+    padding: 6px 10px; background: transparent; border: none; color: var(--muted);
+    font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
   }
   .hand-toggle button.active { background: var(--accent); color: var(--bg); }
 
-  /* MAP WRAPPER */
-  #map-wrapper { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  /* MAP */
+  #map { position: fixed; top: var(--header-h); left: 0; right: 0; bottom: 0; z-index: 1; }
 
-  #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; }
+  /* MAP HINT */
+  #map-hint {
+    position: fixed; top: calc(var(--header-h) + 12px); left: 50%; transform: translateX(-50%);
+    background: rgba(10,12,15,0.88); border: 1px solid var(--border); border-radius: 20px;
+    padding: 7px 16px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+    color: var(--text); text-transform: uppercase; pointer-events: none;
+    z-index: 400; white-space: nowrap; backdrop-filter: blur(4px);
+  }
 
-  /* BOTTOM PANEL */
-  #panel {
+  /* STATUS PILL */
+  #status-pill {
+    position: fixed; top: calc(var(--header-h) + 12px); left: 50%; transform: translateX(-50%);
+    background: rgba(10,12,15,0.88); border: 1px solid var(--border); border-radius: 20px;
+    padding: 6px 14px; font-size: 11px; font-family: 'Space Mono', monospace;
+    color: var(--muted); pointer-events: none; z-index: 400; white-space: nowrap;
+    backdrop-filter: blur(4px); opacity: 0; transition: opacity 0.3s;
+  }
+  #status-pill.visible { opacity: 1; }
+
+  /* SHEET TAB — always at bottom when sheet hidden */
+  #sheet-tab {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 290;
     background: var(--panel); border-top: 1px solid var(--border);
-    flex-shrink: 0; max-height: 46vh; overflow-y: auto;
+    border-radius: 14px 14px 0 0;
+    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    cursor: pointer; touch-action: none; user-select: none;
   }
+  #sheet-tab-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+  #sheet-tab-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 
-  .panel-tabs {
-    display: flex; border-bottom: 1px solid var(--border);
+  /* BOTTOM SHEET */
+  #sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
+    display: flex; flex-direction: column;
+    will-change: transform;
   }
+  #sheet-handle-wrap {
+    background: var(--panel); border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    padding: 10px 0 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    cursor: ns-resize; flex-shrink: 0; touch-action: none; user-select: none;
+  }
+  #sheet-drag-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+  #sheet-handle-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  #sheet-body { background: var(--panel); overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+
+  /* PANEL TABS */
+  .panel-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
   .panel-tabs button {
     flex: 1; padding: 9px 6px; background: transparent; border: none; border-bottom: 2px solid transparent;
     color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
     font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.15s;
   }
   .panel-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-  .tab-content { display: none; padding: 12px 14px; }
+  .tab-content { display: none; padding: 12px 14px 32px; }
   .tab-content.active { display: block; }
 
   /* INPUTS */
   .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .input-group { display: flex; flex-direction: column; gap: 4px; }
-  .input-group label {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
-  }
+  .input-group label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .input-group input {
     background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
     color: var(--text); font-family: 'Space Mono', monospace; font-size: 14px;
     padding: 7px 10px; width: 100%; transition: border-color 0.15s;
   }
   .input-group input:focus { outline: none; border-color: var(--accent); }
-
   .section-label {
     font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--muted); margin: 12px 0 8px; border-top: 1px solid var(--border); padding-top: 10px;
   }
   .section-label:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 
-  /* WINDS TABLE */
-  #winds-tab .wind-row {
-    display: grid; grid-template-columns: 60px 1fr 1fr 40px; gap: 8px; align-items: center;
-    margin-bottom: 8px;
-  }
-  #winds-tab .wind-row label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; font-weight: 600; }
-  #winds-tab .wind-row input {
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
-    color: var(--text); font-family: 'Space Mono', monospace; font-size: 13px;
-    padding: 6px 8px; width: 100%;
-  }
-  #winds-tab .wind-row input:focus { outline: none; border-color: var(--accent2); }
-  #winds-tab .wind-row .alt-label {
-    font-family: 'Space Mono', monospace; font-size: 12px; color: var(--accent2); text-align: right;
-  }
-  .wind-header {
-    display: grid; grid-template-columns: 60px 1fr 1fr 40px; gap: 8px;
-    margin-bottom: 6px;
-  }
-  .wind-header span { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-
-  .fetch-btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%; padding: 9px; background: var(--panel2); border: 1px solid var(--border);
-    border-radius: 4px; color: var(--accent2); font-family: 'Barlow Condensed', sans-serif;
-    font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-    cursor: pointer; margin-bottom: 12px; transition: all 0.15s;
-  }
-  .fetch-btn:hover { border-color: var(--accent2); }
-  .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .fetch-status { font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 10px; font-family: 'Space Mono', monospace; }
-
-  /* RESULTS */
-  #results-tab .result-block {
-    border-left: 3px solid var(--border); padding: 6px 10px; margin-bottom: 8px;
-  }
-  #results-tab .result-block.final { border-color: var(--final-color); }
-  #results-tab .result-block.base { border-color: var(--base-color); }
-  #results-tab .result-block.downwind { border-color: var(--downwind-color); }
-  #results-tab .result-block h3 {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
-  }
-  #results-tab .result-block .val {
-    font-family: 'Space Mono', monospace; font-size: 15px; color: var(--text);
-  }
-  #results-tab .result-block .sub {
-    font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px;
-  }
-
-  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
-
-  .calc-btn {
-    width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 4px;
-    color: var(--bg); font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700;
-    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; margin-bottom: 12px;
-    transition: opacity 0.15s;
-  }
-  .calc-btn:hover { opacity: 0.85; }
-
-  .no-target { font-size: 13px; color: var(--muted); text-align: center; padding: 16px 0; font-family: 'Space Mono', monospace; }
-
-  /* MAP INSTRUCTIONS */
-  #map-hint {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    background: rgba(10,12,15,0.85); border: 1px solid var(--border);
-    border-radius: 4px; padding: 8px 14px;
-    font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--text);
-    text-transform: uppercase; pointer-events: none; z-index: 1000; white-space: nowrap;
-    backdrop-filter: blur(4px);
-  }
-
-  /* WIND INDICATOR on map */
-  .wind-arrow-container { background: none; border: none; }
-
-  /* final heading control */
   #final-heading-row {
-    display: flex; align-items: center; gap: 10px; margin-top: 10px;
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
     padding: 8px 10px; background: var(--panel2); border-radius: 4px; border: 1px solid var(--border);
   }
   #final-heading-row label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 1; }
   #final-heading-row .val { font-family: 'Space Mono', monospace; font-size: 14px; color: var(--accent); min-width: 42px; }
   #final-heading-row input[type=range] { flex: 2; accent-color: var(--accent); }
 
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .calc-btn {
+    width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 4px;
+    color: var(--bg); font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; margin-top: 12px;
+    transition: opacity 0.15s;
+  }
+  .calc-btn:active { opacity: 0.75; }
 
-  /* scrollbar */
-  #panel::-webkit-scrollbar { width: 4px; }
-  #panel::-webkit-scrollbar-track { background: var(--panel); }
-  #panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* WINDS */
+  .wind-header { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+  .wind-header span { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .wind-row { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 7px; }
+  .wind-row .alt-label { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent2); text-align: right; }
+  .wind-row input {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: 'Space Mono', monospace; font-size: 13px; padding: 6px 8px; width: 100%;
+  }
+  .wind-row input:focus { outline: none; border-color: var(--accent2); }
+  .fetch-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 9px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--accent2); font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    cursor: pointer; margin-bottom: 10px; transition: border-color 0.15s;
+  }
+  .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .fetch-status { font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 10px; font-family: 'Space Mono', monospace; line-height: 1.6; }
+
+  /* RESULTS */
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .result-block { border-left: 3px solid var(--border); padding: 6px 10px; }
+  .result-block.final    { border-color: var(--final-color); }
+  .result-block.base     { border-color: var(--base-color); }
+  .result-block.downwind { border-color: var(--downwind-color); }
+  .result-block h3 { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .result-block .val { font-family: 'Space Mono', monospace; font-size: 15px; color: var(--text); }
+  .result-block .sub { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
+  .no-target { font-size: 13px; color: var(--muted); text-align: center; padding: 20px 0; font-family: 'Space Mono', monospace; }
+
+  #sheet-body::-webkit-scrollbar { width: 3px; }
+  #sheet-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="header">
-    <h1>DZ <span>Pattern</span></h1>
-    <div class="hand-toggle">
-      <button id="btn-right" class="active" onclick="setHand('right')">R HAND</button>
-      <button id="btn-left" onclick="setHand('left')">L HAND</button>
-    </div>
-  </div>
 
-  <div id="map-wrapper">
-    <div id="map"></div>
-    <div id="map-hint">Tap map to set landing target</div>
+<div id="header">
+  <h1>DZ <span>Pat</span></h1>
+  <div id="dz-search-wrap">
+    <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div id="dz-dropdown"></div>
   </div>
+  <div class="hand-toggle">
+    <button id="btn-left" class="active" onclick="setHand('left')">L</button>
+    <button id="btn-right" onclick="setHand('right')">R</button>
+  </div>
+</div>
 
-  <div id="panel">
+<div id="map"></div>
+<div id="map-hint">Tap map to set landing target</div>
+<div id="status-pill"></div>
+
+<div id="sheet-tab">
+  <div id="sheet-tab-handle"></div>
+  <div id="sheet-tab-label">Settings &amp; Results</div>
+</div>
+
+<div id="sheet">
+  <div id="sheet-handle-wrap">
+    <div id="sheet-drag-handle"></div>
+    <div id="sheet-handle-label">Drag · tap to close</div>
+  </div>
+  <div id="sheet-body">
     <div class="panel-tabs">
       <button class="active" onclick="showTab('canopy')">Canopy</button>
       <button onclick="showTab('winds')">Winds</button>
       <button onclick="showTab('results')">Pattern</button>
     </div>
 
-    <!-- CANOPY TAB -->
     <div class="tab-content active" id="canopy-tab">
       <div class="input-grid">
-        <div class="input-group">
-          <label>Glide Ratio (:1)</label>
-          <input type="number" id="glide" value="3" min="1" max="10" step="0.1">
-        </div>
-        <div class="input-group">
-          <label>Canopy Speed (kts)</label>
-          <input type="number" id="canopy-speed" value="22" min="10" max="60" step="1">
-        </div>
+        <div class="input-group"><label>Glide Ratio (:1)</label><input type="number" id="glide" value="3" min="1" max="10" step="0.1"></div>
+        <div class="input-group"><label>Canopy Speed (kts)</label><input type="number" id="canopy-speed" value="22" min="10" max="60" step="1"></div>
       </div>
       <div class="section-label">Pattern Altitudes (ft AGL)</div>
       <div class="input-grid">
-        <div class="input-group">
-          <label>Enter Pattern</label>
-          <input type="number" id="alt-enter" value="900" min="200" max="3000" step="50">
-        </div>
-        <div class="input-group">
-          <label>Turn Base</label>
-          <input type="number" id="alt-base" value="600" min="100" max="2000" step="50">
-        </div>
-        <div class="input-group">
-          <label>Turn Final</label>
-          <input type="number" id="alt-final" value="300" min="50" max="1000" step="50">
-        </div>
-        <div class="input-group">
-          <label>Land</label>
-          <input type="number" id="alt-land" value="0" disabled style="opacity:0.4;">
-        </div>
+        <div class="input-group"><label>Enter Pattern</label><input type="number" id="alt-enter" value="900" min="200" max="3000" step="50"></div>
+        <div class="input-group"><label>Turn Base</label><input type="number" id="alt-base" value="600" min="100" max="2000" step="50"></div>
+        <div class="input-group"><label>Turn Final</label><input type="number" id="alt-final" value="300" min="50" max="1000" step="50"></div>
+        <div class="input-group"><label>Land</label><input type="number" id="alt-land" value="0" disabled style="opacity:0.4;"></div>
       </div>
       <div id="final-heading-row">
-        <label>Final Hdg (override)</label>
+        <label>Final Hdg</label>
         <span class="val" id="heading-display">---°</span>
         <input type="range" id="heading-slider" min="0" max="359" step="1" value="0" oninput="onHeadingSlider(this.value)">
         <button onclick="resetHeading()" style="background:none;border:1px solid var(--border);color:var(--muted);padding:4px 8px;border-radius:3px;font-size:11px;font-family:'Barlow Condensed',sans-serif;cursor:pointer;font-weight:600;letter-spacing:.06em;">AUTO</button>
       </div>
-      <button class="calc-btn" style="margin-top:12px;" onclick="calculate()">Calculate Pattern</button>
+      <button class="calc-btn" onclick="calculate()">Recalculate</button>
       <div class="legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--final-color)"></div>Final</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--base-color)"></div>Base (steered)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--base-color)"></div>Base steered</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--downwind-color)"></div>Downwind</div>
-        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.4)"></div>Ground track</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.35)"></div>Ground track</div>
       </div>
     </div>
 
-    <!-- WINDS TAB -->
     <div class="tab-content" id="winds-tab">
-      <button class="fetch-btn" id="fetch-btn" onclick="fetchWinds()">⬇ Fetch Winds for Landing Point</button>
+      <button class="fetch-btn" id="fetch-btn" onclick="fetchWinds().then(calculate)" disabled>⬇ Refresh Winds</button>
       <div class="fetch-status" id="fetch-status">Set landing point on map first</div>
-      <div class="wind-header">
-        <span>Alt (ft)</span><span>Dir (°T)</span><span>Speed (kts)</span><span></span>
-      </div>
+      <div class="wind-header"><span>Alt AGL</span><span>Dir °T</span><span>Spd kts</span></div>
       <div id="wind-rows"></div>
     </div>
 
-    <!-- RESULTS TAB -->
     <div class="tab-content" id="results-tab">
-      <div id="results-content"><div class="no-target">Calculate pattern to see results</div></div>
+      <div id="results-content"><div class="no-target">Tap the map to calculate</div></div>
     </div>
   </div>
 </div>
@@ -271,625 +274,521 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
-let state = {
-  hand: 'right',          // 'right' | 'left'
-  target: null,           // {lat, lng}
+const state = {
+  hand: 'left',
+  target: null,
   fieldElevFt: 0,
-  finalHeadingDeg: null,  // null = auto from wind
+  finalHeadingDeg: null,
   manualHeading: false,
-  winds: [],              // [{altFt, dirDeg, speedKts}] sorted ascending
-  surfaceWind: null,      // real 10m AGL observed wind from open-meteo
-  pattern: null,          // calculated result
+  winds: [],
+  surfaceWind: null,
+  pattern: null,
 };
 
-// Wind altitude bands we'll display/edit (ft AGL-ish, we convert to MSL for fetch)
-const WIND_ALTS_FT = [0, 1000, 2000, 3000, 5000, 7000, 9000, 12000];
+const WIND_ALTS_FT   = [0, 1000, 2000, 3000, 5000, 7000, 9000, 12000];
+const PRESSURE_LEVELS = [925, 850, 700, 600, 500, 400, 300];
+const SNAP_HIDDEN = 0, SNAP_PEEK = 0.38, SNAP_FULL = 0.72;
 
-// ─── MAP SETUP ───────────────────────────────────────────────────────────────
-const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([36.0, -86.5], 13);
+// ─── BOTTOM SHEET ────────────────────────────────────────────────────────────
+const sheet          = document.getElementById('sheet');
+const sheetTab       = document.getElementById('sheet-tab');
+const sheetHandle    = document.getElementById('sheet-handle-wrap');
+let sheetSnap        = SNAP_HIDDEN;
+let dragStartY       = null;
+let dragStartSnap    = null;
+let sheetDragging    = false;
 
-// Try multiple satellite sources in order of preference
+function setSheetSnap(snap, animate = true) {
+  sheetSnap = snap;
+  const vh = window.innerHeight;
+  sheet.style.transition = animate ? 'transform 0.35s cubic-bezier(0.32,0.72,0,1)' : 'none';
+  if (snap === SNAP_HIDDEN) {
+    sheet.style.transform = 'translateY(100%)';
+    sheetTab.style.display = 'flex';
+  } else {
+    const h = Math.round(vh * snap);
+    sheet.style.height = h + 'px';
+    sheet.style.transform = `translateY(calc(100% - ${h}px))`;
+    sheetTab.style.display = 'none';
+  }
+  const tabH = sheetTab.offsetHeight || 42;
+  const mapBottom = snap === SNAP_HIDDEN ? tabH : Math.round(vh * snap);
+  document.getElementById('map').style.bottom = mapBottom + 'px';
+  setTimeout(() => map.invalidateSize(), 10);
+}
+
+sheetTab.addEventListener('click', () => setSheetSnap(SNAP_PEEK));
+
+sheetHandle.addEventListener('click', () => {
+  if (sheetDragging) return;
+  setSheetSnap(sheetSnap > SNAP_HIDDEN ? SNAP_HIDDEN : SNAP_PEEK);
+});
+
+function dragStart(y) { dragStartY = y; dragStartSnap = sheetSnap; sheetDragging = false; sheet.style.transition = 'none'; }
+function dragMove(y) {
+  if (dragStartY === null) return;
+  const dy = dragStartY - y;
+  if (Math.abs(dy) > 5) sheetDragging = true;
+  const vh = window.innerHeight;
+  const s = Math.max(0, Math.min(SNAP_FULL, dragStartSnap + dy / vh));
+  const h = Math.round(vh * s);
+  sheet.style.height = h + 'px';
+  sheet.style.transform = `translateY(calc(100% - ${h}px))`;
+  if (s > 0) sheetTab.style.display = 'none';
+}
+function dragEnd(y) {
+  if (dragStartY === null) return;
+  const dy = dragStartY - y;
+  const vh = window.innerHeight;
+  const cur = dragStartSnap + dy / vh;
+  const snaps = [SNAP_HIDDEN, SNAP_PEEK, SNAP_FULL];
+  const nearest = snaps.reduce((a,b) => Math.abs(b-cur) < Math.abs(a-cur) ? b : a);
+  dragStartY = null;
+  setSheetSnap(nearest);
+  setTimeout(() => { sheetDragging = false; }, 50);
+}
+
+sheetHandle.addEventListener('touchstart', e => dragStart(e.touches[0].clientY), {passive:true});
+sheetHandle.addEventListener('touchmove',  e => dragMove(e.touches[0].clientY),  {passive:true});
+sheetHandle.addEventListener('touchend',   e => dragEnd(e.changedTouches[0].clientY));
+sheetHandle.addEventListener('mousedown',  e => dragStart(e.clientY));
+document.addEventListener('mousemove', e => { if (dragStartY !== null) dragMove(e.clientY); });
+document.addEventListener('mouseup',   e => { if (dragStartY !== null) dragEnd(e.clientY); });
+
+// ─── MAP ─────────────────────────────────────────────────────────────────────
+const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([36.0, -86.5], 13);
+
 const tileSources = [
-  {
-    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    opts: { subdomains: '0123', maxZoom: 21, attribution: '© Google' }
-  },
-  {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    opts: { maxZoom: 20, attribution: '© Esri' }
-  },
-  {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    opts: { maxZoom: 19, attribution: '© OpenStreetMap' }
-  }
+  {url:'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', opts:{subdomains:'0123', maxZoom:21, attribution:'© Google'}},
+  {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:20, attribution:'© Esri'}},
+  {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opts:{maxZoom:19, attribution:'© OpenStreetMap'}},
 ];
-
+let tileIdx = 0;
 let tileLayer = L.tileLayer(tileSources[0].url, tileSources[0].opts).addTo(map);
-
-// If first source fails, try next
-let tileSourceIdx = 0;
-tileLayer.on('tileerror', function() {
-  tileSourceIdx++;
-  if (tileSourceIdx < tileSources.length) {
+tileLayer.on('tileerror', () => {
+  if (++tileIdx < tileSources.length) {
     map.removeLayer(tileLayer);
-    tileLayer = L.tileLayer(tileSources[tileSourceIdx].url, tileSources[tileSourceIdx].opts).addTo(map);
+    tileLayer = L.tileLayer(tileSources[tileIdx].url, tileSources[tileIdx].opts).addTo(map);
   }
 });
 
-L.control.zoom({ position: 'topright' }).addTo(map);
-L.control.attribution({ position: 'bottomright', prefix: '© Esri' }).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+navigator.geolocation?.getCurrentPosition(p => map.setView([p.coords.latitude, p.coords.longitude], 14), ()=>{});
 
-// Try geolocation
-navigator.geolocation?.getCurrentPosition(pos => {
-  map.setView([pos.coords.latitude, pos.coords.longitude], 14);
-}, () => {});
+let targetMarker = null, patternLayers = [];
+map.on('click', e => placeTarget(e.latlng.lat, e.latlng.lng));
 
-// Layers
-let targetMarker = null;
-let patternLayers = [];
+// ─── STATUS ───────────────────────────────────────────────────────────────────
+function setStatus(msg, persist = false) {
+  const el = document.getElementById('status-pill');
+  el.textContent = msg;
+  el.classList.add('visible');
+  if (setStatus._t) clearTimeout(setStatus._t);
+  if (!persist) setStatus._t = setTimeout(() => el.classList.remove('visible'), 3500);
+}
 
-// Map click
-map.on('click', e => {
-  placeTarget(e.latlng.lat, e.latlng.lng);
-});
-
-function placeTarget(lat, lng) {
+// ─── PLACE TARGET ────────────────────────────────────────────────────────────
+async function placeTarget(lat, lng) {
   state.target = {lat, lng};
   state.pattern = null;
   clearPattern();
 
   if (targetMarker) map.removeLayer(targetMarker);
-
-  const icon = L.divIcon({
-    html: `<div style="width:18px;height:18px;background:var(--accent);border-radius:50%;border:3px solid #fff;box-shadow:0 0 8px rgba(232,244,77,0.6);"></div>`,
-    iconSize: [18,18], iconAnchor: [9,9], className: ''
-  });
-  targetMarker = L.marker([lat, lng], {icon, zIndexOffset: 1000}).addTo(map);
+  targetMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      html:`<div style="width:18px;height:18px;background:var(--accent);border-radius:50%;border:3px solid #fff;box-shadow:0 0 8px rgba(232,244,77,0.6);"></div>`,
+      iconSize:[18,18], iconAnchor:[9,9], className:''
+    }),
+    zIndexOffset: 1000
+  }).addTo(map);
 
   document.getElementById('map-hint').style.display = 'none';
-  document.getElementById('fetch-status').textContent = `Location set: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   document.getElementById('fetch-btn').disabled = false;
+  setStatus('Fetching elevation & winds…', true);
 
-  // auto-fetch elevation
-  fetchElevation(lat, lng);
+  await fetchElevation(lat, lng);
+  await fetchWinds();
+  calculate();
+  setSheetSnap(SNAP_PEEK);
+  showTab('results');
 }
 
 // ─── WIND ROWS ───────────────────────────────────────────────────────────────
 function buildWindRows() {
-  const container = document.getElementById('wind-rows');
-  container.innerHTML = '';
+  const c = document.getElementById('wind-rows');
+  c.innerHTML = '';
   WIND_ALTS_FT.forEach((alt, i) => {
-    const wind = state.winds[i] || {altFt: alt, dirDeg: '', speedKts: ''};
     const row = document.createElement('div');
     row.className = 'wind-row';
+    const label = alt === 0 ? 'SFC' : alt >= 1000 ? (alt/1000)+'k' : alt;
     row.innerHTML = `
-      <div class="alt-label">${alt === 0 ? 'SFC' : alt.toLocaleString()}</div>
-      <input type="number" min="0" max="360" step="1" placeholder="---"
-        value="${wind.dirDeg !== '' ? wind.dirDeg : ''}"
-        onchange="updateWind(${i}, 'dirDeg', this.value)">
-      <input type="number" min="0" max="200" step="1" placeholder="---"
-        value="${wind.speedKts !== '' ? wind.speedKts : ''}"
-        onchange="updateWind(${i}, 'speedKts', this.value)">
-      <div style="font-size:10px;color:var(--muted);text-align:center;">ft</div>
+      <div class="alt-label">${label}</div>
+      <input type="number" min="0" max="360" step="1" placeholder="---" onchange="updateWind(${i},'dirDeg',this.value)">
+      <input type="number" min="0" max="200" step="1" placeholder="---" onchange="updateWind(${i},'speedKts',this.value)">
     `;
-    container.appendChild(row);
+    c.appendChild(row);
   });
-  // init winds array
-  if (state.winds.length === 0) {
-    state.winds = WIND_ALTS_FT.map(alt => ({altFt: alt, dirDeg: null, speedKts: null}));
-  }
+  state.winds = WIND_ALTS_FT.map(alt => ({altFt:alt, dirDeg:null, speedKts:null}));
 }
 
 function updateWind(i, field, val) {
-  if (!state.winds[i]) state.winds[i] = {altFt: WIND_ALTS_FT[i], dirDeg: null, speedKts: null};
-  state.winds[i][field] = val === '' ? null : parseFloat(val);
+  if (!state.winds[i]) state.winds[i] = {altFt:WIND_ALTS_FT[i], dirDeg:null, speedKts:null};
+  state.winds[i][field] = val==='' ? null : parseFloat(val);
+  if (WIND_ALTS_FT[i] === 0) {
+    if (!state.surfaceWind) state.surfaceWind = {dirDeg:null, speedKts:null};
+    state.surfaceWind[field] = state.winds[i][field];
+  }
+}
+
+function rebuildWindInputs() {
+  const rows = document.querySelectorAll('#wind-rows .wind-row');
+  state.winds.forEach((w, i) => {
+    if (!rows[i]) return;
+    const [inp0, inp1] = rows[i].querySelectorAll('input');
+    const isSfc = WIND_ALTS_FT[i] === 0;
+    const src = isSfc && state.surfaceWind ? state.surfaceWind : w;
+    inp0.value = src.dirDeg  !== null ? src.dirDeg  : '';
+    inp1.value = src.speedKts !== null ? src.speedKts : '';
+    if (isSfc && state.surfaceWind) {
+      inp0.style.borderColor = 'var(--accent2)';
+      inp1.style.borderColor = 'var(--accent2)';
+      rows[i].querySelector('.alt-label').style.color = 'var(--accent)';
+    }
+  });
 }
 
 buildWindRows();
 
-// ─── ELEVATION FETCH ─────────────────────────────────────────────────────────
+// ─── ELEVATION ───────────────────────────────────────────────────────────────
 async function fetchElevation(lat, lng) {
   try {
-    const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
-    const data = await res.json();
-    if (data.elevation && data.elevation[0] != null) {
-      state.fieldElevFt = Math.round(data.elevation[0] * 3.28084);
-      document.getElementById('fetch-status').textContent =
-        `Field elev: ${state.fieldElevFt} ft MSL — ready to fetch winds`;
-    }
-  } catch(e) {
-    console.warn('Elevation fetch failed', e);
-  }
+    const d = await (await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`)).json();
+    if (d.elevation?.[0] != null) state.fieldElevFt = Math.round(d.elevation[0] * 3.28084);
+  } catch(e) { console.warn('Elevation fetch failed', e); }
 }
 
 // ─── WINDS FETCH ─────────────────────────────────────────────────────────────
-// Open-Meteo pressure level wind variables
-// We fetch 10m surface + pressure levels covering ~SFC to FL390
-const PRESSURE_LEVELS = [925, 850, 700, 600, 500, 400, 300]; // hPa
-
-// Approximate MSL altitude in feet for standard atmosphere
 function pressureToAltFt(hPa) {
-  // standard atmosphere approximation
-  if (hPa >= 925) return 2500;
-  if (hPa >= 850) return 5000;
-  if (hPa >= 700) return 10000;
-  if (hPa >= 600) return 14000;
-  if (hPa >= 500) return 18000;
-  if (hPa >= 400) return 24000;
+  if (hPa>=925) return 2500; if (hPa>=850) return 5000; if (hPa>=700) return 10000;
+  if (hPa>=600) return 14000; if (hPa>=500) return 18000; if (hPa>=400) return 24000;
   return 30000;
 }
 
 async function fetchWinds() {
   if (!state.target) return;
   const btn = document.getElementById('fetch-btn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Fetching…';
-  document.getElementById('fetch-status').textContent = 'Contacting open-meteo.com…';
-
+  btn.disabled = true; btn.textContent = '⏳ Fetching…';
   try {
     const {lat, lng} = state.target;
-    // Build variable list: surface wind + pressure level winds
-    const plVars = PRESSURE_LEVELS.flatMap(p => [
-      `windspeed_${p}hPa`, `winddirection_${p}hPa`
-    ]).join(',');
+    const plVars = PRESSURE_LEVELS.flatMap(p=>[`windspeed_${p}hPa`,`winddirection_${p}hPa`]).join(',');
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=windspeed_10m,winddirection_10m&hourly=${plVars}&wind_speed_unit=kn&forecast_days=1&timezone=auto`;
+    const d = await (await fetch(url)).json();
+    const hi = new Date().getHours();
 
-    const res = await fetch(url);
-    const data = await res.json();
+    state.surfaceWind = {
+      dirDeg: Math.round(d.current.winddirection_10m),
+      speedKts: Math.round(d.current.windspeed_10m)
+    };
 
-    // Get current hour index
-    const now = new Date();
-    const hourIdx = now.getHours(); // use local hour as approx
-
-    // Build winds array: surface from current, pressure levels from hourly[0]
-    const rawWinds = [];
-
-      // Surface (10m AGL = real observed value, store separately)
-      state.surfaceWind = {
-        dirDeg: Math.round(data.current.winddirection_10m),
-        speedKts: Math.round(data.current.windspeed_10m)
-      };
-
-      rawWinds.push({
-        altFt: state.fieldElevFt,
-        dirDeg: state.surfaceWind.dirDeg,
-        speedKts: state.surfaceWind.speedKts
-      });
-
-    // Pressure levels
+    const raw = [{altFt: state.fieldElevFt, dirDeg: state.surfaceWind.dirDeg, speedKts: state.surfaceWind.speedKts}];
     PRESSURE_LEVELS.forEach(p => {
-      const speedKey = `windspeed_${p}hPa`;
-      const dirKey = `winddirection_${p}hPa`;
-      if (data.hourly[speedKey] && data.hourly[dirKey]) {
-        const altFtMSL = pressureToAltFt(p);
-        rawWinds.push({
-          altFt: altFtMSL,
-          dirDeg: Math.round(data.hourly[dirKey][hourIdx]),
-          speedKts: Math.round(data.hourly[speedKey][hourIdx])
-        });
-      }
+      if (d.hourly[`windspeed_${p}hPa`]?.[hi] != null)
+        raw.push({altFt: pressureToAltFt(p), dirDeg: Math.round(d.hourly[`winddirection_${p}hPa`][hi]), speedKts: Math.round(d.hourly[`windspeed_${p}hPa`][hi])});
+    });
+    raw.sort((a,b)=>a.altFt-b.altFt);
+
+    state.winds = WIND_ALTS_FT.map(agl => {
+      if (agl===0) return {altFt:0, dirDeg:state.surfaceWind.dirDeg, speedKts:state.surfaceWind.speedKts};
+      return {altFt:agl, ...interpObj(raw, agl + state.fieldElevFt)};
     });
 
-    // Sort by altitude
-    rawWinds.sort((a,b) => a.altFt - b.altFt);
-
-    // Now interpolate to our display bands (WIND_ALTS_FT in MSL = AGL + fieldElev)
-    state.winds = WIND_ALTS_FT.map((agl, i) => {
-      const msl = agl + state.fieldElevFt;
-      const interp = interpolateWind(rawWinds, msl);
-      return {altFt: agl, dirDeg: interp.dir, speedKts: interp.speed};
-    });
-
-    // Rebuild wind row inputs
     rebuildWindInputs();
-
     const sw = state.surfaceWind;
     document.getElementById('fetch-status').textContent =
-      `Surface: ${sw.dirDeg}° @ ${sw.speedKts}kt (10m AGL) — aloft interpolated — edit to override`;
+      `SFC: ${sw.dirDeg}° @ ${sw.speedKts}kt (10m AGL)\nElev: ${state.fieldElevFt}ft MSL · aloft interpolated`;
 
-    // Auto-set final heading from surface wind
-    if (!state.manualHeading && sw.dirDeg !== null) {
-      state.finalHeadingDeg = sw.dirDeg;
-      updateHeadingDisplay(state.finalHeadingDeg);
-    }
+    if (!state.manualHeading) { state.finalHeadingDeg = sw.dirDeg; updateHeadingDisplay(sw.dirDeg); }
+    setStatus(`Winds loaded · SFC ${sw.dirDeg}°@${sw.speedKts}kt`);
   } catch(e) {
     document.getElementById('fetch-status').textContent = `Fetch failed: ${e.message}`;
+    setStatus('Wind fetch failed');
     console.error(e);
   }
-
-  btn.disabled = false;
-  btn.textContent = '⬇ Fetch Winds for Landing Point';
+  btn.disabled = false; btn.textContent = '⬇ Refresh Winds';
 }
 
-function interpolateWind(sorted, targetAltFt) {
-  if (sorted.length === 0) return {dir: 0, speed: 0};
-  if (targetAltFt <= sorted[0].altFt) return {dir: sorted[0].dirDeg, speed: sorted[0].speedKts};
-  if (targetAltFt >= sorted[sorted.length-1].altFt) {
-    const last = sorted[sorted.length-1];
-    return {dir: last.dirDeg, speed: last.speedKts};
-  }
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const lo = sorted[i], hi = sorted[i+1];
-    if (targetAltFt >= lo.altFt && targetAltFt <= hi.altFt) {
-      const t = (targetAltFt - lo.altFt) / (hi.altFt - lo.altFt);
-      // Interpolate direction handling 360 wrap
-      let dDir = hi.dirDeg - lo.dirDeg;
-      if (dDir > 180) dDir -= 360;
-      if (dDir < -180) dDir += 360;
-      const dir = (lo.dirDeg + t * dDir + 360) % 360;
-      const speed = lo.speedKts + t * (hi.speedKts - lo.speedKts);
-      return {dir: Math.round(dir), speed: Math.round(speed)};
+function interpObj(sorted, msl) {
+  const r = interpolateWind(sorted, msl); return {dirDeg:r.dir, speedKts:r.speed};
+}
+
+function interpolateWind(sorted, targetAlt) {
+  if (!sorted.length) return {dir:0, speed:0};
+  if (targetAlt <= sorted[0].altFt) return {dir:sorted[0].dirDeg, speed:sorted[0].speedKts};
+  const last = sorted[sorted.length-1];
+  if (targetAlt >= last.altFt) return {dir:last.dirDeg, speed:last.speedKts};
+  for (let i=0; i<sorted.length-1; i++) {
+    const lo=sorted[i], hi=sorted[i+1];
+    if (targetAlt>=lo.altFt && targetAlt<=hi.altFt) {
+      const t=(targetAlt-lo.altFt)/(hi.altFt-lo.altFt);
+      let dd=hi.dirDeg-lo.dirDeg;
+      if (dd>180) dd-=360; if (dd<-180) dd+=360;
+      return {dir:Math.round((lo.dirDeg+t*dd+360)%360), speed:Math.round(lo.speedKts+t*(hi.speedKts-lo.speedKts))};
     }
   }
-  return {dir: 0, speed: 0};
+  return {dir:0, speed:0};
 }
 
-function rebuildWindInputs() {
-  const rows = document.querySelectorAll('#wind-rows .wind-row');
-  state.winds.forEach((w, i) => {
-    if (rows[i]) {
-      const inputs = rows[i].querySelectorAll('input');
-      // For SFC row (i===0), use real surface wind if available
-      const isSfc = WIND_ALTS_FT[i] === 0;
-      const src = (isSfc && state.surfaceWind) ? state.surfaceWind : w;
-      inputs[0].value = src.dirDeg !== null ? src.dirDeg : '';
-      inputs[1].value = src.speedKts !== null ? src.speedKts : '';
-      if (isSfc && state.surfaceWind) {
-        inputs[0].style.borderColor = 'var(--accent2)';
-        inputs[1].style.borderColor = 'var(--accent2)';
-        rows[i].querySelector('.alt-label').style.color = 'var(--accent2)';
-      }
-    }
-  });
-}
-
-// ─── HEADING CONTROL ─────────────────────────────────────────────────────────
-function onHeadingSlider(val) {
-  state.manualHeading = true;
-  state.finalHeadingDeg = parseInt(val);
-  updateHeadingDisplay(state.finalHeadingDeg);
-}
-
+// ─── HEADING ─────────────────────────────────────────────────────────────────
+function onHeadingSlider(v) { state.manualHeading=true; state.finalHeadingDeg=parseInt(v); updateHeadingDisplay(parseInt(v)); }
 function resetHeading() {
-  state.manualHeading = false;
-  if (state.winds[0] && state.winds[0].dirDeg !== null) {
-    state.finalHeadingDeg = state.winds[0].dirDeg;
-    updateHeadingDisplay(state.finalHeadingDeg);
-  } else {
-    state.finalHeadingDeg = null;
-    document.getElementById('heading-display').textContent = '---°';
-  }
+  state.manualHeading=false;
+  if (state.surfaceWind?.dirDeg!=null) { state.finalHeadingDeg=state.surfaceWind.dirDeg; updateHeadingDisplay(state.surfaceWind.dirDeg); }
+  else { state.finalHeadingDeg=null; document.getElementById('heading-display').textContent='---°'; }
+}
+function updateHeadingDisplay(d) {
+  document.getElementById('heading-display').textContent = Math.round(d)+'°';
+  document.getElementById('heading-slider').value = Math.round(d);
 }
 
-function updateHeadingDisplay(deg) {
-  document.getElementById('heading-display').textContent = Math.round(deg) + '°';
-  document.getElementById('heading-slider').value = Math.round(deg);
+// ─── GEOMETRY ────────────────────────────────────────────────────────────────
+const R_FT=20902231, D2R=Math.PI/180, R2D=180/Math.PI;
+function offsetLL(lat,lng,dN,dE) { return {lat:lat+(dN/R_FT)*R2D, lng:lng+(dE/(R_FT*Math.cos(lat*D2R)))*R2D}; }
+function hdgVec(h) { const r=h*D2R; return {n:Math.cos(r),e:Math.sin(r)}; }
+function windVec(from,spd) { const r=(from+180)*D2R; return {n:Math.cos(r)*spd,e:Math.sin(r)*spd}; }
+
+function getWindAtAGL(agl) {
+  const msl = agl + state.fieldElevFt;
+  const sorted = state.winds.filter(w=>w.dirDeg!==null&&w.speedKts!==null).sort((a,b)=>a.altFt-b.altFt);
+  if (!sorted.length) return {n:0,e:0};
+  const sm = sorted.map(w=>({altFt:w.altFt+state.fieldElevFt,dirDeg:w.dirDeg,speedKts:w.speedKts}));
+  const r = interpolateWind(sm, msl);
+  return windVec(r.dir, r.speed);
 }
 
-// ─── GEOMETRY HELPERS ────────────────────────────────────────────────────────
-const R_EARTH_FT = 20902231; // feet
-const DEG2RAD = Math.PI / 180;
-const RAD2DEG = 180 / Math.PI;
-
-// Move a lat/lng by (dNorth_ft, dEast_ft)
-function offsetLatLng(lat, lng, dNorthFt, dEastFt) {
-  const dLat = (dNorthFt / R_EARTH_FT) * RAD2DEG;
-  const dLng = (dEastFt / (R_EARTH_FT * Math.cos(lat * DEG2RAD))) * RAD2DEG;
-  return {lat: lat + dLat, lng: lng + dLng};
-}
-
-// Heading to (dNorth, dEast) unit vector
-function headingToVec(hdgDeg) {
-  const r = hdgDeg * DEG2RAD;
-  return {n: Math.cos(r), e: Math.sin(r)};
-}
-
-// Wind "from" direction to velocity vector (component: + = blowing north/east)
-function windToVec(fromDeg, speedKts) {
-  // Wind FROM dirDeg means air moves opposite
-  const r = (fromDeg + 180) * DEG2RAD;
-  return {n: Math.cos(r) * speedKts, e: Math.sin(r) * speedKts};
-}
-
-// Get wind at a given AGL altitude by linear interpolation from state.winds
-function getWindAtAGL(aglFt) {
-  const msl = aglFt + state.fieldElevFt;
-  let sorted = state.winds
-    .filter(w => w.dirDeg !== null && w.speedKts !== null)
-    .sort((a,b) => a.altFt - b.altFt);
-
-  // Replace or prepend real surface wind at 0ft AGL if available
-  if (state.surfaceWind && state.surfaceWind.dirDeg !== null) {
-    sorted = sorted.filter(w => w.altFt !== 0);
-    sorted.unshift({altFt: 0, dirDeg: state.surfaceWind.dirDeg, speedKts: state.surfaceWind.speedKts});
-  }
-
-  if (sorted.length === 0) return {n:0, e:0};
-  const sortedMSL = sorted.map(w => ({...w, mslFt: w.altFt + state.fieldElevFt}));
-  const interp = interpolateWind(sortedMSL.map(w => ({altFt: w.mslFt, dirDeg: w.dirDeg, speedKts: w.speedKts})), msl);
-  return windToVec(interp.dir, interp.speed);
-}
-
-// ─── PATTERN CALCULATION ─────────────────────────────────────────────────────
+// ─── CALCULATE ───────────────────────────────────────────────────────────────
 function calculate() {
-  if (!state.target) { alert('Tap the map to set a landing point first.'); return; }
+  if (!state.target) return;
+  const glide   = parseFloat(document.getElementById('glide').value);
+  const cSpd    = parseFloat(document.getElementById('canopy-speed').value);
+  const altE    = parseFloat(document.getElementById('alt-enter').value);
+  const altB    = parseFloat(document.getElementById('alt-base').value);
+  const altF    = parseFloat(document.getElementById('alt-final').value);
 
-  const glide = parseFloat(document.getElementById('glide').value);
-  const canopySpeedKts = parseFloat(document.getElementById('canopy-speed').value);
-  const altEnter = parseFloat(document.getElementById('alt-enter').value);
-  const altBase = parseFloat(document.getElementById('alt-base').value);
-  const altFinal = parseFloat(document.getElementById('alt-final').value);
+  if (altB>=altE||altF>=altB) { setStatus('Altitudes must be: Enter > Base > Final'); return; }
 
-  // Validate altitudes
-  if (altBase >= altEnter || altFinal >= altBase) {
-    alert('Altitudes must be: Enter > Base > Final'); return;
+  let fHdg = state.finalHeadingDeg;
+  if (fHdg===null) {
+    const s = state.winds.find(w=>w.dirDeg!==null);
+    if (!s) { setStatus('Set winds or a final heading'); return; }
+    fHdg = s.dirDeg;
   }
 
-  // Determine final heading
-  let finalHdg = state.finalHeadingDeg;
-  if (finalHdg === null) {
-    // derive from surface wind
-    const surf = state.winds.find(w => w.dirDeg !== null);
-    if (!surf) { alert('Set winds or enter a final heading.'); return; }
-    finalHdg = surf.dirDeg; // fly INTO the wind
+  const dRate = (cSpd * 101.269) / glide;  // ft/min descent
+  const tF = altF  / dRate;
+  const tB = (altB - altF) / dRate;
+  const tD = (altE - altB) / dRate;
+
+  function legDisp(hdg, midAGL, altLoss, tMin) {
+    const w = getWindAtAGL(midAGL), v = hdgVec(hdg);
+    return { dN: v.n*altLoss*glide + w.n*(tMin/60)*6076,
+             dE: v.e*altLoss*glide + w.e*(tMin/60)*6076 };
   }
 
-  // Leg altitude bands (AGL midpoints for wind interpolation)
-  const finalMidAGL = altFinal / 2;
-  const baseMidAGL = (altBase + altFinal) / 2;
-  const downwindMidAGL = (altEnter + altBase) / 2;
+  // Left hand: turn left from base → final means base heading = fHdg+90
+  // Right hand: turn right from base → final means base heading = fHdg-90
+  const dwHdg = (fHdg+180)%360;
+  const bHdg  = state.hand==='left' ? (fHdg+90)%360 : (fHdg-90+360)%360;
 
-  // Canopy airspeed in ft/min (kts * 101.269 ft/min per kt)
-  const canopySpeedFtMin = canopySpeedKts * 101.269;
+  const fDisp  = legDisp(fHdg,  altF/2,        altF,    tF);
+  const {lat:tLat,lng:tLng} = state.target;
+  const tFinal = offsetLL(tLat,tLng,-fDisp.dN,-fDisp.dE);
 
-  // Descent rate: airspeed / glide ratio (ft/min vertical)
-  const descentRateFtMin = canopySpeedFtMin / glide;
+  const bDisp  = legDisp(bHdg,  (altB+altF)/2, altB-altF, tB);
+  const tBase  = offsetLL(tFinal.lat,tFinal.lng,-bDisp.dN,-bDisp.dE);
 
-  // Leg durations in minutes
-  const tFinal = altFinal / descentRateFtMin;
-  const tBase = (altBase - altFinal) / descentRateFtMin;
-  const tDownwind = (altEnter - altBase) / descentRateFtMin;
+  const dDisp  = legDisp(dwHdg, (altE+altB)/2, altE-altB, tD);
+  const entry  = offsetLL(tBase.lat,tBase.lng,-dDisp.dN,-dDisp.dE);
 
-  // Helper: compute leg ground track displacement
-  // headingDeg = steered heading, tMin = time on leg
-  function legDisplacement(headingDeg, midAGL, altLossFt, tMin) {
-    const wind = getWindAtAGL(midAGL);
-    const vec = headingToVec(headingDeg);
-    // Still-air horizontal distance = altitude loss × glide ratio (feet)
-    const stillAirFt = altLossFt * glide;
-    // Steered displacement (feet)
-    const steerN = vec.n * stillAirFt;
-    const steerE = vec.e * stillAirFt;
-    // Wind drift displacement: wind (kts) × time (hours) × 6076 ft/nm
-    const tHours = tMin / 60;
-    const driftN = wind.n * tHours * 6076;
-    const driftE = wind.e * tHours * 6076;
-    // Ground track = steered + drift
-    return {dN: steerN + driftN, dE: steerE + driftE};
-  }
+  // Base steered heading line (still-air only, no drift)
+  const bv = hdgVec(bHdg);
+  const bSteered = offsetLL(tBase.lat, tBase.lng, bv.n*(altB-altF)*glide, bv.e*(altB-altF)*glide);
 
-  // Headings
-  // right-hand pattern: final into wind, base is 90° CCW from final (right hand = turn right onto base, right onto downwind)
-  // left-hand pattern: base is 90° CW from final
-  const finalHdgR = finalHdg;
-  let baseHdg, downwindHdg;
-  if (state.hand === 'right') {
-    // Right hand: downwind opposite of final, turn right onto base, right onto final
-    downwindHdg = (finalHdg + 180) % 360;
-    baseHdg = (finalHdg + 90) % 360; // base heading 90° right of final
-  } else {
-    downwindHdg = (finalHdg + 180) % 360;
-    baseHdg = (finalHdg - 90 + 360) % 360; // base heading 90° left of final
-  }
-
-  // ── Work backwards from landing point ──
-
-  // FINAL LEG:
-  // Jumper flies finalHdg for tFinal minutes
-  // Ground track displacement from turn-to-final to landing
-  const finalDisp = legDisplacement(finalHdg, finalMidAGL, altFinal, tFinal);
-
-  // Turn-to-final point = landing point MINUS final ground track
-  const {lat: tgtLat, lng: tgtLng} = state.target;
-  const turnFinal = offsetLatLng(tgtLat, tgtLng, -finalDisp.dN, -finalDisp.dE);
-
-  // BASE LEG (drifting pattern):
-  // Jumper steers baseHdg for tBase minutes
-  // Wind drifts the canopy — the actual ground track diverges from steered heading
-  // The turn-to-final point is FIXED. We need to find where to START the base leg.
-  const baseDisp = legDisplacement(baseHdg, baseMidAGL, altBase - altFinal, tBase);
-
-  // Turn-to-base (start of base leg) = turn-to-final MINUS base ground track
-  const turnBase = offsetLatLng(turnFinal.lat, turnFinal.lng, -baseDisp.dN, -baseDisp.dE);
-
-  // DOWNWIND LEG:
-  // Jumper flies downwindHdg for tDownwind minutes
-  const downwindDisp = legDisplacement(downwindHdg, downwindMidAGL, altEnter - altBase, tDownwind);
-
-  // Pattern entry point = turn-to-base MINUS downwind ground track
-  const entryPoint = offsetLatLng(turnBase.lat, turnBase.lng, -downwindDisp.dN, -downwindDisp.dE);
-
-  // Base steered heading end point (what the jumper aims at, ignoring drift)
-  const baseSteeredEnd = offsetLatLng(
-    turnBase.lat, turnBase.lng,
-    headingToVec(baseHdg).n * canopySpeedKts * (tBase / 60) * 6076,
-    headingToVec(baseHdg).e * canopySpeedKts * (tBase / 60) * 6076
-  );
-
-  state.pattern = {
-    entryPoint, turnBase, baseSteeredEnd, turnFinal,
-    landing: state.target,
-    finalHdg, baseHdg, downwindHdg,
-    tFinal, tBase, tDownwind,
-    finalDisp, baseDisp, downwindDisp,
-    glide, canopySpeedKts, altEnter, altBase, altFinal,
-  };
+  state.pattern = {entry, tBase, bSteered, tFinal, landing:state.target,
+    fHdg, bHdg, dwHdg, tF, tB, tD, fDisp, bDisp, dDisp,
+    glide, cSpd, altE, altB, altF};
 
   drawPattern();
   showResults();
-  showTab('results');
 }
 
 // ─── DRAW ─────────────────────────────────────────────────────────────────────
-function clearPattern() {
-  patternLayers.forEach(l => map.removeLayer(l));
-  patternLayers = [];
-}
+function clearPattern() { patternLayers.forEach(l=>map.removeLayer(l)); patternLayers=[]; }
+function addL(l) { l.addTo(map); patternLayers.push(l); return l; }
+function ll(o) { return [o.lat,o.lng]; }
 
-function llObj(o) { return [o.lat, o.lng]; }
-
-function addLayer(layer) {
-  layer.addTo(map);
-  patternLayers.push(layer);
-  return layer;
+function pinIcon(color) {
+  return L.divIcon({
+    html:`<div style="width:13px;height:13px;border:2px solid ${color};background:${color}33;border-radius:50%;"></div>`,
+    iconSize:[13,13], iconAnchor:[6,6], className:''
+  });
 }
 
 function drawPattern() {
   clearPattern();
-  const p = state.pattern;
-  if (!p) return;
+  const p = state.pattern; if (!p) return;
+  const {entry,tBase,bSteered,tFinal,landing} = p;
 
-  const {entryPoint, turnBase, baseSteeredEnd, turnFinal, landing} = p;
+  addL(L.polyline([ll(entry),ll(tBase)],  {color:'#f4944d',weight:3,opacity:0.9}));
+  addL(L.polyline([ll(tBase),ll(bSteered)],{color:'rgba(255,255,255,0.4)',weight:2,dashArray:'6 4'}));
+  addL(L.polyline([ll(tBase),ll(tFinal)], {color:'#4df4c8',weight:3,opacity:0.9}));
+  addL(L.polyline([ll(tFinal),ll(landing)],{color:'#e8f44d',weight:3,opacity:0.95}));
 
-  // Downwind leg
-  addLayer(L.polyline([llObj(entryPoint), llObj(turnBase)], {
-    color: '#f4944d', weight: 3, opacity: 0.9, dashArray: null
-  }));
+  // Turn point markers with altitude tooltips
+  addL(L.marker(ll(entry),  {icon:pinIcon('#f4944d')}).bindTooltip(`Pattern Entry (${p.altE}ft AGL)`,  {direction:'top'}));
+  addL(L.marker(ll(tBase),  {icon:pinIcon('#4df4c8')}).bindTooltip(`Turn Base (${p.altB}ft AGL)`,     {direction:'top'}));
+  addL(L.marker(ll(tFinal), {icon:pinIcon('#e8f44d')}).bindTooltip(`Turn Final (${p.altF}ft AGL)`,    {direction:'top'}));
 
-  // Base steered heading (dashed white = intended heading)
-  addLayer(L.polyline([llObj(turnBase), llObj(baseSteeredEnd)], {
-    color: 'rgba(255,255,255,0.4)', weight: 2, opacity: 0.7, dashArray: '6 4'
-  }));
-
-  // Base actual ground track (solid teal)
-  addLayer(L.polyline([llObj(turnBase), llObj(turnFinal)], {
-    color: '#4df4c8', weight: 3, opacity: 0.9
-  }));
-
-  // Final leg
-  addLayer(L.polyline([llObj(turnFinal), llObj(landing)], {
-    color: '#e8f44d', weight: 3, opacity: 0.95
-  }));
-
-  // Entry point marker
-  const entryIcon = L.divIcon({
-    html: `<div style="width:12px;height:12px;border:2px solid #f4944d;border-radius:50%;background:rgba(244,148,77,0.3);"></div>`,
-    iconSize:[12,12], iconAnchor:[6,6], className:''
-  });
-  addLayer(L.marker(llObj(entryPoint), {icon: entryIcon}).bindTooltip('Pattern Entry', {permanent:false}));
-
-  // Turn-to-base marker
-  const baseIcon = L.divIcon({
-    html: `<div style="width:14px;height:14px;border:2px solid #4df4c8;background:rgba(77,244,200,0.25);border-radius:50%;"></div>`,
-    iconSize:[14,14], iconAnchor:[7,7], className:''
-  });
-  addLayer(L.marker(llObj(turnBase), {icon: baseIcon}).bindTooltip(`Turn Base (${p.altBase}ft AGL)`, {permanent:false}));
-
-  // Turn-to-final marker
-  const finalIcon = L.divIcon({
-    html: `<div style="width:14px;height:14px;border:2px solid #e8f44d;background:rgba(232,244,77,0.25);border-radius:50%;"></div>`,
-    iconSize:[14,14], iconAnchor:[7,7], className:''
-  });
-  addLayer(L.marker(llObj(turnFinal), {icon: finalIcon}).bindTooltip(`Turn Final (${p.altFinal}ft AGL)`, {permanent:false}));
-
-  // Wind arrow at landing point
-  const windAtSfc = getWindAtAGL(0);
-  const windSpeedKts = Math.sqrt(windAtSfc.n**2 + windAtSfc.e**2);
-  if (windSpeedKts > 0) {
-    const windFromDeg = (Math.atan2(windAtSfc.e, windAtSfc.n) * RAD2DEG + 360) % 360; // velocity dir
-    const windFromDirDisplay = (windFromDeg + 180) % 360; // "from" direction
-    const arrowIcon = L.divIcon({
-      html: `<div style="transform:rotate(${windFromDeg}deg);font-size:22px;line-height:1;color:#fff;text-shadow:0 0 4px rgba(0,0,0,0.8);">↑</div>
-             <div style="font-size:10px;font-family:'Space Mono',monospace;color:#fff;text-shadow:0 0 4px #000;white-space:nowrap;margin-top:2px;">${Math.round(windFromDirDisplay)}°@${Math.round(windSpeedKts)}kt</div>`,
-      iconSize:[60,40], iconAnchor:[30,10], className:''
-    });
-    addLayer(L.marker(llObj({lat: state.target.lat + 0.0005, lng: state.target.lng}), {icon: arrowIcon, zIndexOffset: 500}));
+  // Surface wind arrow
+  const w = getWindAtAGL(0), ws = Math.sqrt(w.n**2+w.e**2);
+  if (ws > 0.5) {
+    const velDeg = (Math.atan2(w.e,w.n)*R2D+360)%360;
+    const fromDeg = (velDeg+180)%360;
+    const arrowPt = offsetLL(state.target.lat, state.target.lng, 100, 0);
+    addL(L.marker(ll(arrowPt), {
+      icon: L.divIcon({
+        html:`<div style="transform:rotate(${velDeg}deg);font-size:18px;color:#fff;text-shadow:0 0 4px #000;line-height:1;text-align:center;">↑</div>
+              <div style="font-size:9px;font-family:'Space Mono',monospace;color:#fff;text-shadow:0 0 3px #000;white-space:nowrap;text-align:center;">${Math.round(fromDeg)}°@${Math.round(ws)}kt</div>`,
+        iconSize:[50,34], iconAnchor:[25,8], className:''
+      }),
+      interactive:false, zIndexOffset:200
+    }));
   }
 
-  // Fit map to pattern
-  const bounds = L.latLngBounds([
-    llObj(entryPoint), llObj(turnBase), llObj(turnFinal), llObj(landing)
-  ]);
-  map.fitBounds(bounds, {padding: [60, 60]});
+  map.fitBounds(L.latLngBounds([ll(entry),ll(tBase),ll(tFinal),ll(landing)]), {padding:[60,60]});
 }
 
-// ─── RESULTS DISPLAY ─────────────────────────────────────────────────────────
-function ftToMiles(ft) { return (ft / 5280).toFixed(2); }
-function dispFt(dN, dE) { return Math.round(Math.sqrt(dN**2 + dE**2)); }
+// ─── RESULTS ─────────────────────────────────────────────────────────────────
+function dft(dN,dE) { return Math.round(Math.sqrt(dN**2+dE**2)); }
 
 function showResults() {
-  const p = state.pattern;
-  if (!p) return;
+  const p = state.pattern; if (!p) return;
+  const fd=dft(p.fDisp.dN,p.fDisp.dE), bd=dft(p.bDisp.dN,p.bDisp.dE), dd=dft(p.dDisp.dN,p.dDisp.dE);
 
-  const finalDist = dispFt(p.finalDisp.dN, p.finalDisp.dE);
-  const baseDist = dispFt(p.baseDisp.dN, p.baseDisp.dE);
-  const downwindDist = dispFt(p.downwindDisp.dN, p.downwindDisp.dE);
-
-  // Wind component on each leg
-  function windComponent(legHdg, midAGL) {
-    const w = getWindAtAGL(midAGL);
-    const vec = headingToVec(legHdg);
-    return Math.round(w.n * vec.n + w.e * vec.e); // + = headwind if final into wind
-  }
-  const finalWC = windComponent(p.finalHdg, p.altFinal/2);
-  const baseWC = windComponent(p.baseHdg, (p.altBase+p.altFinal)/2);
-  const dwWC = windComponent(p.downwindHdg, (p.altEnter+p.altBase)/2);
+  function wc(hdg,agl) { const w=getWindAtAGL(agl),v=hdgVec(hdg); return Math.round(w.n*v.n+w.e*v.e); }
+  const fWC=wc(p.fHdg, p.altF/2), bWC=wc(p.bHdg,(p.altB+p.altF)/2), dWC=wc(p.dwHdg,(p.altE+p.altB)/2);
 
   document.getElementById('results-content').innerHTML = `
     <div class="result-grid">
       <div class="result-block final">
         <h3>Final</h3>
-        <div class="val">${finalDist.toLocaleString()} ft</div>
-        <div class="sub">Hdg ${Math.round(p.finalHdg)}° · ${Math.round(p.tFinal*60)}s</div>
-        <div class="sub">${Math.abs(finalWC)}kt ${finalWC >= 0 ? 'headwind' : 'tailwind'}</div>
+        <div class="val">${fd.toLocaleString()} ft</div>
+        <div class="sub">Hdg ${Math.round(p.fHdg)}° · ${Math.round(p.tF*60)}s</div>
+        <div class="sub">${Math.abs(fWC)}kt ${fWC>=0?'headwind':'tailwind'}</div>
       </div>
       <div class="result-block base">
         <h3>Base</h3>
-        <div class="val">${baseDist.toLocaleString()} ft</div>
-        <div class="sub">Steer ${Math.round(p.baseHdg)}° · ${Math.round(p.tBase*60)}s</div>
-        <div class="sub">${Math.abs(baseWC)}kt ${baseWC > 0 ? 'into' : 'with'} cross</div>
+        <div class="val">${bd.toLocaleString()} ft</div>
+        <div class="sub">Steer ${Math.round(p.bHdg)}° · ${Math.round(p.tB*60)}s</div>
+        <div class="sub">${Math.abs(bWC)}kt cross</div>
       </div>
       <div class="result-block downwind">
         <h3>Downwind</h3>
-        <div class="val">${downwindDist.toLocaleString()} ft</div>
-        <div class="sub">Hdg ${Math.round(p.downwindHdg)}° · ${Math.round(p.tDownwind*60)}s</div>
-        <div class="sub">${Math.abs(dwWC)}kt ${dwWC <= 0 ? 'tailwind' : 'headwind'}</div>
+        <div class="val">${dd.toLocaleString()} ft</div>
+        <div class="sub">Hdg ${Math.round(p.dwHdg)}° · ${Math.round(p.tD*60)}s</div>
+        <div class="sub">${Math.abs(dWC)}kt ${dWC<=0?'tailwind':'headwind'}</div>
       </div>
       <div class="result-block" style="border-color:var(--muted)">
-        <h3>Final Hdg</h3>
-        <div class="val">${Math.round(p.finalHdg)}°</div>
-        <div class="sub">${state.manualHeading ? 'manual override' : 'auto from wind'}</div>
-        <div class="sub">${state.hand} hand pattern</div>
+        <h3>Setup</h3>
+        <div class="val">${Math.round(p.fHdg)}° final</div>
+        <div class="sub">${state.manualHeading?'manual':'auto wind'}</div>
+        <div class="sub">${state.hand}-hand</div>
       </div>
     </div>
-    <div style="margin-top:10px;padding:8px 10px;background:var(--panel2);border-radius:4px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted);">
-      Glide ${p.glide}:1 · ${p.canopySpeedKts}kt · Elev ${state.fieldElevFt}ft MSL
-    </div>
-  `;
+    <div style="margin-top:8px;padding:7px 10px;background:var(--panel2);border-radius:4px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted);">
+      Glide ${p.glide}:1 · ${p.cSpd}kt · ${state.fieldElevFt}ft MSL
+    </div>`;
 }
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 function showTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.panel-tabs button').forEach(el => el.classList.remove('active'));
-  document.getElementById(`${name}-tab`).classList.add('active');
-  const tabs = ['canopy','winds','results'];
-  document.querySelectorAll('.panel-tabs button')[tabs.indexOf(name)].classList.add('active');
+  ['canopy','winds','results'].forEach((t,i) => {
+    document.getElementById(`${t}-tab`).classList.toggle('active', t===name);
+    document.querySelectorAll('.panel-tabs button')[i].classList.toggle('active', t===name);
+  });
 }
 
 // ─── HANDEDNESS ──────────────────────────────────────────────────────────────
-function setHand(hand) {
-  state.hand = hand;
-  document.getElementById('btn-right').classList.toggle('active', hand === 'right');
-  document.getElementById('btn-left').classList.toggle('active', hand === 'left');
-  if (state.pattern) calculate(); // recalculate with new handedness
+function setHand(h) {
+  state.hand = h;
+  document.getElementById('btn-left').classList.toggle('active',  h==='left');
+  document.getElementById('btn-right').classList.toggle('active', h==='right');
+  if (state.pattern) calculate();
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-document.getElementById('fetch-btn').disabled = true;
+// ─── DZ SEARCH ───────────────────────────────────────────────────────────────
+let dzList=[], dzIdx=-1;
 
-// Force Leaflet to recalculate map size after layout settles (Safari fix)
-setTimeout(() => { map.invalidateSize(); }, 300);
+(async()=>{
+  try {
+    const d = await (await fetch('https://raw.githubusercontent.com/OTGApps/USPADropzones/master/dropzones.geojson')).json();
+    dzList = d.features.filter(f=>f.geometry?.coordinates).map(f=>({
+      name:f.properties.name||'', city:f.properties.city||'', state:f.properties.state||'',
+      lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0]
+    })).filter(d=>d.name&&d.lat&&d.lng);
+  } catch(e){ console.warn('DZ data failed',e); }
+})();
+
+const dzEl = document.getElementById('dz-search');
+const dzDd = document.getElementById('dz-dropdown');
+
+dzEl.addEventListener('input', ()=>{
+  const q = dzEl.value.trim().toLowerCase();
+  if (q.length<2) { closeDd(); return; }
+  const res = dzList.filter(d=>d.name.toLowerCase().includes(q)||d.city.toLowerCase().includes(q)||d.state.toLowerCase().includes(q)).slice(0,12);
+  showDd(res.length ? res : [{name:`Search "${dzEl.value}"`,city:'via location search',state:'',lat:null,lng:null,geo:true}]);
+});
+
+dzEl.addEventListener('keydown', e=>{
+  const items=dzDd.querySelectorAll('.dz-item');
+  if (e.key==='ArrowDown'){e.preventDefault();dzIdx=Math.min(dzIdx+1,items.length-1);hilite(items);}
+  else if(e.key==='ArrowUp'){e.preventDefault();dzIdx=Math.max(dzIdx-1,0);hilite(items);}
+  else if(e.key==='Enter'){e.preventDefault();if(dzIdx>=0)items[dzIdx]?.click();}
+  else if(e.key==='Escape'){closeDd();dzEl.blur();}
+});
+
+document.addEventListener('click',e=>{ if(!e.target.closest('#dz-search-wrap'))closeDd(); });
+function hilite(items){items.forEach((el,i)=>el.classList.toggle('selected',i===dzIdx));}
+
+function showDd(results){
+  dzIdx=-1; dzDd.innerHTML='';
+  results.forEach(dz=>{
+    const el=document.createElement('div'); el.className='dz-item';
+    el.innerHTML=`<div class="dz-name">${dz.name}</div><div class="dz-loc">${[dz.city,dz.state].filter(Boolean).join(', ')}</div>`;
+    el.addEventListener('click',()=>pickDZ(dz));
+    dzDd.appendChild(el);
+  });
+  dzDd.classList.add('open');
+}
+function closeDd(){dzDd.classList.remove('open');dzDd.innerHTML='';}
+
+async function pickDZ(dz){
+  closeDd();
+  if(dz.geo){
+    try{
+      const r=await(await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dzEl.value.trim())}&format=json&limit=5`)).json();
+      if(!r.length){setStatus('Location not found');return;}
+      if(r.length===1){dzEl.value=r[0].display_name.split(',').slice(0,2).join(',');map.setView([+r[0].lat,+r[0].lon],14);}
+      else showDd(r.map(x=>({name:x.display_name.split(',')[0],city:x.display_name.split(',').slice(1,3).join(',').trim(),state:'',lat:+x.lat,lng:+x.lon})));
+    }catch(e){setStatus('Geocode failed');}
+    return;
+  }
+  dzEl.value=dz.name;
+  map.setView([dz.lat,dz.lng],15);
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+setSheetSnap(SNAP_HIDDEN, false);
+setTimeout(()=>map.invalidateSize(), 300);
 </script>
 </body>
 </html>
