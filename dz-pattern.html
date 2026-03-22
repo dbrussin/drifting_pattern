@@ -32,34 +32,31 @@
     display: flex; align-items: center; gap: 8px; padding: 0 10px;
     background: #12151a; border-bottom: 1px solid var(--border);
   }
-  #header h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent); text-transform: uppercase; white-space: nowrap; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  @media (max-width: 380px) { #header h1 span { display: none; } } /* hide 'Planner' on very small screens, keep 'Pattern' */
+  #header h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent); text-transform: uppercase; white-space: nowrap; flex: 1; }
+  #header h1 span { color: var(--text); font-weight: 400; }
 
-  /* ── DZ SEARCH — starts collapsed, icon toggles open/closed ── */
-  #dz-search-wrap { position: relative; display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; }
-  #dz-search-icon {
-    width: 30px; height: 30px; align-items: center; justify-content: center; display: flex;
-    color: var(--muted); font-size: 15px; cursor: pointer; flex-shrink: 0;
+  /* ── FLOATING SEARCH BAR — slides down from header when open ── */
+  #search-bar {
+    position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 499;
+    background: rgba(12,15,20,0.97); border-bottom: 1px solid var(--border);
+    padding: 8px 10px; backdrop-filter: blur(6px);
+    display: none;
   }
+  #search-bar.open { display: block; }
   #dz-search {
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
-    color: var(--text); font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
-    padding: 6px 10px; letter-spacing: 0.04em;
-    transition: max-width 0.25s, opacity 0.2s, padding 0.2s;
-    max-width: 200px; width: 200px;
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 600;
+    padding: 8px 12px; letter-spacing: 0.04em;
   }
-  /* Collapsed by default — JS removes class to expand */
-  #dz-search-wrap.collapsed #dz-search { max-width: 0; width: 0; opacity: 0; pointer-events: none; padding: 0; border-color: transparent; }
   #dz-search:focus { outline: none; border-color: var(--accent); }
   #dz-search::placeholder { color: var(--muted); }
-  /* On narrow screens limit expanded width so help stays visible */
-  @media (max-width: 400px) { #dz-search { max-width: 140px; width: 140px; } }
   #dz-dropdown {
-    display: none; position: absolute; top: calc(100% + 4px); right: 0; left: auto;
+    position: absolute; top: calc(100% + 0px); left: 10px; right: 10px;
     background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
-    z-index: 2000; max-height: 220px; overflow-y: auto; min-width: 220px;
+    z-index: 2001; max-height: 240px; overflow-y: auto;
   }
   #dz-dropdown.open { display: block; }
+  #dz-dropdown { display: none; }
 
   /* ── HEADING BAR — persistent bottom bar ── */
   #heading-bar {
@@ -251,15 +248,19 @@
 <!-- HEADER -->
 <div id="header">
   <h1>Pattern <span>Planner</span></h1>
-  <div id="dz-search-wrap">
-    <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div id="dz-search-icon" onclick="toggleSearch()" title="Search drop zones">🔍</div>
-    <div id="dz-dropdown"></div>
-  </div>
+  <div onclick="toggleSearch()" id="dz-search-icon" title="Search drop zones"
+    style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;">🔍</div>
   <div onclick="toggleOverlay('help')" title="Help"
     style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
     border:1px solid var(--border);border-radius:50%;color:var(--text);font-size:13px;
-    cursor:pointer;flex-shrink:0;font-weight:700;background:var(--panel2);margin-left:6px;">?</div>
+    cursor:pointer;flex-shrink:0;font-weight:700;background:var(--panel2);">?</div>
+</div>
+
+<!-- FLOATING SEARCH BAR -->
+<div id="search-bar">
+  <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
+  <div id="dz-dropdown"></div>
 </div>
 
 <!-- MAP -->
@@ -1157,20 +1158,22 @@ function updateCanopyCalc() {
 
 // ─── SEARCH COLLAPSE ──────────────────────────────────────────────────────────
 function toggleSearch() {
-  const wrap = document.getElementById('dz-search-wrap');
-  if (wrap.classList.contains('collapsed')) {
-    expandSearch();
-  } else {
+  const bar = document.getElementById('search-bar');
+  if (bar.classList.contains('open')) {
     collapseSearch();
+  } else {
+    expandSearch();
   }
 }
 function collapseSearch() {
-  document.getElementById('dz-search-wrap').classList.add('collapsed');
+  document.getElementById('search-bar').classList.remove('open');
+  document.getElementById('dz-dropdown').classList.remove('open');
+  document.getElementById('dz-dropdown').innerHTML = '';
 }
 function expandSearch() {
   const el = document.getElementById('dz-search');
   el.value = '';
-  document.getElementById('dz-search-wrap').classList.remove('collapsed');
+  document.getElementById('search-bar').classList.add('open');
   setTimeout(() => el.focus(), 50);
 }
 
