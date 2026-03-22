@@ -243,12 +243,13 @@
   <div style="flex:1"></div>
   <div id="dz-search-wrap">
     <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div id="dz-search-icon" onclick="expandSearch()" title="Search drop zones">🔍</div>
-    <div onclick="toggleOverlay('help')" title="Help"
-      style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;
-      color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;font-weight:700;">?</div>
+    <div id="dz-search-icon" onclick="toggleSearch()" title="Search drop zones">🔍</div>
     <div id="dz-dropdown"></div>
   </div>
+  <div onclick="toggleOverlay('help')" title="Help"
+    style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:50%;color:var(--text);font-size:13px;
+    cursor:pointer;flex-shrink:0;font-weight:700;background:var(--panel2);margin-left:6px;">?</div>
 </div>
 
 <!-- MAP -->
@@ -266,7 +267,7 @@
 
 <!-- ICON BAR -->
 <div id="icon-bar">
-  <div class="map-icon-btn active" id="btn-labels"   onclick="toggleOverlay('labels')"   title="Layers">🏷️</div>
+  <div class="map-icon-btn" id="btn-labels"   onclick="toggleOverlay('labels')"   title="Display options">👁</div>
   <div class="map-icon-btn" id="btn-settings" onclick="toggleOverlay('settings')" title="Settings">🪂</div>
   <div class="map-icon-btn" id="btn-winds"    onclick="toggleOverlay('winds')"    title="Winds aloft">💨</div>
 </div>
@@ -370,6 +371,16 @@
     <div class="field-note" id="canopy-calc-note"></div>
     <div class="field-note" style="margin-top:4px;">Enter any two — third is calculated. Vertical speed = sink rate in still air (e.g. from FlySight). All values are knots.</div>
 
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+      <button onclick="resetAllSettings()" style="
+        width:100%;padding:9px;background:transparent;
+        border:1px solid rgba(232,77,77,0.5);border-radius:4px;
+        color:rgba(232,77,77,0.8);font-family:'Barlow Condensed',sans-serif;
+        font-size:12px;font-weight:700;letter-spacing:0.06em;cursor:pointer;">
+        Reset All Settings &amp; Clear Data
+      </button>
+    </div>
+
   </div>
 </div>
 
@@ -397,6 +408,10 @@
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <span style="font-size:12px;font-weight:600;color:var(--text);">Pattern Labels</span>
         <div id="layer-patternLabels" class="layer-toggle active" onclick="toggleLayer('patternLabels')">On</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:600;color:var(--text);">Map Legend</span>
+        <div id="layer-legend" class="layer-toggle active" onclick="toggleLayer('legend')">On</div>
       </div>
     </div>
   </div>
@@ -455,7 +470,7 @@
 
     <div class="help-section">
       <div class="help-heading">Layers</div>
-      <p>Use the 🏷️ button to toggle individual map layers — jump run, exit region, canopy regions, and pattern labels — independently.</p>
+      <p>Use the 👁 button to toggle individual map layers — jump run, exit region, canopy regions, pattern labels, and map legend — independently.</p>
     </div>
 
     <div class="help-section">
@@ -463,8 +478,84 @@
       <p>Tap 🔍 to search for a drop zone by name. Results come from the USPA dropzone database. Selecting a DZ sets the map view and landing target to that location.</p>
     </div>
 
+    <div class="help-section">
+      <div class="help-heading">Terms &amp; Disclaimer</div>
+      <p style="color:var(--accent);font-weight:700;margin-bottom:6px;">DEVELOPMENT VERSION — NOT FOR OPERATIONAL USE</p>
+      <p>This application is experimental software provided for informational and educational purposes only. It must not be used to plan, execute, or inform any actual skydive, parachute operation, aircraft jump run, or any other aviation or parachuting activity.</p>
+      <p style="margin-top:6px;"><b>Assumption of Risk.</b> Skydiving, parachuting, and all related activities involve extreme risk of serious injury or death. You acknowledge that you are solely responsible for all decisions made before, during, and after any jump.</p>
+      <p style="margin-top:6px;"><b>No Warranty.</b> This software is provided "as is" without warranty of any kind. Wind data, pattern calculations, safety region estimates, and all other outputs may be inaccurate, incomplete, delayed, or wrong. Do not rely on them.</p>
+      <p style="margin-top:6px;"><b>Release of Liability.</b> To the fullest extent permitted by applicable law, you release and hold harmless the developer, contributors, and data providers from any and all claims, damages, losses, or liability arising from your use of this application.</p>
+      <p style="margin-top:6px;">By using this application you confirm you have read, understood, and agreed to these terms.</p>
+    </div>
+
     <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;">
       Pattern Planner · Wind data: open-meteo.com · DZ data: USPA
+    </div>
+  </div>
+</div>
+
+<!-- WAIVER MODAL -->
+<div id="waiver-modal" style="
+  display:none;position:fixed;inset:0;z-index:2000;
+  background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:16px;">
+  <div style="
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    width:min(480px,100%);max-height:90vh;display:flex;flex-direction:column;
+    overflow:hidden;">
+    <div style="padding:16px 18px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px;">Pattern Planner</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);">Terms of Use &amp; Disclaimer</div>
+    </div>
+    <div style="overflow-y:auto;padding:16px 18px;flex:1;-webkit-overflow-scrolling:touch;">
+
+      <div style="background:rgba(232,77,77,0.15);border:1px solid rgba(232,77,77,0.4);border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#e84d4d;margin-bottom:4px;">Development Version — Not For Operational Use</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">This is experimental software under active development. It has not been tested, validated, or certified for any purpose. It must not be used to plan, execute, or inform any actual skydive, parachute operation, aircraft jump run, or any other aviation or parachuting activity.</div>
+      </div>
+
+      <div style="font-size:12px;color:var(--text);line-height:1.7;">
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">1. Assumption of Risk</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">Skydiving, parachuting, BASE jumping, and all related activities are inherently dangerous and involve serious risk of injury, permanent disability, or death. You acknowledge that you are a voluntary participant who is solely responsible for all decisions made before, during, and after any jump or flight activity. No output from this application reduces, transfers, or shares that responsibility.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">2. No Warranty; Accuracy Not Guaranteed</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">This application and all of its outputs — including but not limited to wind data, pattern geometry, safety region estimates, jump run suggestions, green/red light distances, and canopy performance calculations — are provided "AS IS" and "AS AVAILABLE" without warranty of any kind, express or implied. Wind forecasts are derived from third-party model data that may be delayed, inaccurate, or unavailable. All calculations rely on assumptions and simplifications that may not reflect actual atmospheric or flight conditions. Do not rely on any output of this application for any operational decision.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">3. Release of Liability</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">To the fullest extent permitted by applicable law in your jurisdiction, you hereby release, waive, discharge, and covenant not to sue the developer of this application, its contributors, affiliates, data providers, and any associated parties (collectively, "Released Parties") from any and all liability, claims, demands, actions, or causes of action whatsoever, including claims based on negligence, arising out of or related to your use of or reliance on this application, whether or not such claims are known, suspected, or unanticipated at the time of this agreement.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">4. Indemnification</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">You agree to indemnify, defend, and hold harmless the Released Parties from and against any claims, damages, losses, costs, or expenses (including reasonable legal fees) arising out of your use of this application, your violation of these terms, or your violation of any applicable law or regulation.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">5. Not a Substitute for Training or Judgment</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">This application is not a substitute for proper skydiving training, current currency, situational awareness, or the judgment of a qualified instructor, coach, or safety officer. Always follow the rules and guidance of your drop zone, your national governing body (e.g., USPA), and applicable aviation regulations.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">6. Governing Law; Severability</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">These terms shall be governed by applicable law. If any provision of these terms is found to be unenforceable in any jurisdiction, that provision shall be modified to the minimum extent necessary to make it enforceable, and the remaining provisions shall continue in full force. The unenforceability of any provision in one jurisdiction shall not affect its enforceability elsewhere.</p>
+
+        <div style="font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">7. Updates to These Terms</div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">These terms may be updated from time to time. If the terms are updated, you will be asked to review and agree again before continued use of the application.</p>
+
+      </div>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:10px;color:var(--muted);line-height:1.5;font-family:'Space Mono',monospace;">
+        By tapping "I Understand and Agree" you confirm that you have read and understood these terms and agree to be bound by them.
+      </div>
+      <button onclick="agreeToWaiver()" style="
+        width:100%;padding:12px;background:var(--accent);color:var(--bg);border:none;
+        border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-size:14px;
+        font-weight:700;letter-spacing:0.06em;cursor:pointer;">
+        I Understand and Agree
+      </button>
+      <button onclick="declineWaiver()" style="
+        width:100%;padding:10px;background:transparent;color:var(--muted);
+        border:1px solid var(--border);border-radius:6px;
+        font-family:'Barlow Condensed',sans-serif;font-size:12px;
+        font-weight:600;letter-spacing:0.06em;cursor:pointer;">
+        I Do Not Agree (exit)
+      </button>
     </div>
   </div>
 </div>
@@ -504,13 +595,61 @@ const state = {
   surfaceWind: null,
   pattern: null,
   labelsVisible: true, // always true; individual layers controlled by state.layers
-  layers: { jumpRun:true, exitRegion:true, canopyRegions:true, patternLabels:true },
+  layers: { jumpRun:true, exitRegion:true, canopyRegions:true, patternLabels:true, legend:true },
   fitDone: false,
   patternType: 'drifting',
 };
 
 // Wind cache — keyed by rounded lat/lng, expires after CACHE_MS
 const CACHE_MS = 20 * 60 * 1000; // 20 minutes
+
+// ─── SETTINGS PERSISTENCE ─────────────────────────────────────────────────────
+// Declared early so saveSettings() is available to setHand, setPatternType, toggleLayer
+const STORAGE_VERSION = '1';
+const WAIVER_VERSION  = '1.0';
+function storageKey(k) { return `pp_${k}`; }
+
+const PERSIST_INPUTS = [
+  'alt-enter','alt-base','alt-final',
+  'alt-exit','alt-open','ff-speed',
+  'jr-airspeed','exit-sep','safety-margin',
+  'glide','canopy-speed',
+];
+
+function saveSettings() {
+  if (_loadingSettings) return;
+  try {
+    PERSIST_INPUTS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.value !== '') localStorage.setItem(storageKey(id), el.value);
+    });
+    localStorage.setItem(storageKey('hand'),         state.hand);
+    localStorage.setItem(storageKey('pattern_type'), state.patternType);
+    localStorage.setItem(storageKey('layers'),       JSON.stringify(state.layers));
+  } catch(e) { console.warn('saveSettings error:', e); }
+}
+
+function resetAllSettings() {
+  if (!confirm('Reset all settings and clear saved data? You will need to agree to the terms again.')) return;
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith('pp_')).forEach(k => localStorage.removeItem(k));
+    // Explicitly remove waiver in case prefix filter missed it
+    localStorage.removeItem('pp_waiver_version');
+  } catch(e) {}
+  location.reload();
+}
+
+function initStorage() {
+  try {
+    if (localStorage.getItem(storageKey('storage_version')) !== STORAGE_VERSION) {
+      // Preserve waiver agreement across storage version changes
+      const waiverAgreed = localStorage.getItem('pp_waiver_version');
+      Object.keys(localStorage).filter(k => k.startsWith('pp_')).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(storageKey('storage_version'), STORAGE_VERSION);
+      if (waiverAgreed) localStorage.setItem('pp_waiver_version', waiverAgreed);
+    }
+  } catch(e) {}
+}
 const windCache = {}; // { key: {winds, surfaceWind, fieldElevFt, ts} }
 function cacheKey(lat, lng) { return `${lat.toFixed(2)},${lng.toFixed(2)}`; }
 function distMiles(a, b) {
@@ -578,9 +717,7 @@ function toggleOverlay(name) {
   const isOpen = panel.classList.contains('open');
   // Close all panels first
   document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('open'));
-  document.querySelectorAll('.map-icon-btn').forEach(b => {
-    if (b.id !== 'btn-labels') b.classList.remove('active');
-  });
+  document.querySelectorAll('.map-icon-btn').forEach(b => b.classList.remove('active'));
   if (!isOpen) {
     panel.classList.add('open');
     btn.classList.add('active');
@@ -948,6 +1085,7 @@ function setPatternType(type) {
   document.getElementById('pattern-type-note').textContent = type==='drifting'
     ? 'Base leg: steered 90° to final, wind drift carries you to turn point.'
     : 'Base leg: crabbed to hold a 90° ground track to final, no intentional drift.';
+  saveSettings();
   if (state.pattern) calculate();
 }
 
@@ -1007,6 +1145,14 @@ function updateCanopyCalc() {
 }
 
 // ─── SEARCH COLLAPSE ──────────────────────────────────────────────────────────
+function toggleSearch() {
+  const wrap = document.getElementById('dz-search-wrap');
+  if (wrap.classList.contains('collapsed')) {
+    expandSearch();
+  } else {
+    collapseSearch();
+  }
+}
 function collapseSearch() {
   document.getElementById('dz-search-wrap').classList.add('collapsed');
 }
@@ -1019,7 +1165,7 @@ function expandSearch() {
 
 // ─── LEGEND REVEAL ────────────────────────────────────────────────────────────
 function showLegend() {
-  document.getElementById('map-legend').classList.add('visible');
+  if (state.layers.legend) document.getElementById('map-legend').classList.add('visible');
 }
 
 // ─── JUMP RUN HEADING ────────────────────────────────────────────────────────
@@ -1684,6 +1830,13 @@ function toggleLayer(name) {
     el.classList.toggle('active', state.layers[name]);
     el.textContent = state.layers[name] ? 'On' : 'Off';
   }
+  if (name === 'legend') {
+    const leg = document.getElementById('map-legend');
+    if (leg) leg.classList.toggle('visible', state.layers[name] && !!state.target);
+    saveSettings();
+    return;
+  }
+  saveSettings();
   if (state.pattern) drawPattern();
 }
 
@@ -1692,6 +1845,7 @@ function setHand(h) {
   state.hand=h;
   document.getElementById('btn-left').classList.toggle('active',  h==='left');
   document.getElementById('btn-right').classList.toggle('active', h==='right');
+  saveSettings();
   if (state.pattern) calculate();
 }
 
@@ -1749,8 +1903,74 @@ async function pickDZ(dz){
   collapseSearch();
 }
 
+// ─── WAIVER ───────────────────────────────────────────────────────────────────
+function checkWaiver() {
+  try {
+    if (localStorage.getItem('pp_waiver_version') === WAIVER_VERSION) return;
+  } catch(e) {}
+  document.getElementById('waiver-modal').style.display = 'flex';
+}
+function agreeToWaiver() {
+  try { localStorage.setItem('pp_waiver_version', WAIVER_VERSION); } catch(e) {}
+  document.getElementById('waiver-modal').style.display = 'none';
+}
+function declineWaiver() {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0c0f;color:#666;font-family:sans-serif;font-size:14px;text-align:center;padding:20px;">You must agree to the terms to use Pattern Planner.</div>';
+}
+
+// ─── SETTINGS PERSISTENCE ─────────────────────────────────────────────────────
+// loadSettings and initStorage called in INIT section below
+
+let _loadingSettings = false;
+
+function loadSettings() {
+  _loadingSettings = true;
+  try {
+    // Numeric inputs
+    PERSIST_INPUTS.forEach(id => {
+      const val = localStorage.getItem(storageKey(id));
+      const el  = document.getElementById(id);
+      if (val !== null && el) { el.value = val; el.style.color = 'var(--text)'; }
+    });
+
+    // Hand
+    const hand = localStorage.getItem(storageKey('hand'));
+    if (hand === 'left' || hand === 'right') setHand(hand);
+
+    // Pattern type
+    const pt = localStorage.getItem(storageKey('pattern_type'));
+    if (pt === 'drifting' || pt === 'traditional') setPatternType(pt);
+
+    // Layer visibility — directly set state and update buttons
+    // Done last so setHand/setPatternType don't clobber pp_layers via saveSettings
+    const layersStr = localStorage.getItem(storageKey('layers'));
+    if (layersStr) {
+      const saved = JSON.parse(layersStr);
+      Object.keys(state.layers).forEach(name => {
+        if (name in saved) {
+          state.layers[name] = !!saved[name];
+          const btn = document.getElementById(`layer-${name}`);
+          if (btn) {
+            btn.classList.toggle('active', state.layers[name]);
+            btn.textContent = state.layers[name] ? 'On' : 'Off';
+          }
+        }
+      });
+    }
+  } catch(e) { console.warn('loadSettings error:', e); }
+  _loadingSettings = false;
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+initStorage();   // version-check and wipe stale data first
+checkWaiver();
+loadSettings();
 updateCanopyCalc();
+// Persist on any input/change
+document.querySelectorAll('input').forEach(el => {
+  el.addEventListener('change', saveSettings);
+  el.addEventListener('input',  saveSettings);
+});
 window.addEventListener('resize', () => { if (state.surfaceWind) updateWindPyramid(); updateJrPyramid(); });
 setTimeout(()=>map.invalidateSize(), 300);
 </script>
