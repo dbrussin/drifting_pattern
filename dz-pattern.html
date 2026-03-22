@@ -217,6 +217,22 @@
   }
   .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .fetch-status { font-size: 10px; color: var(--muted); text-align: center; margin-bottom: 10px; font-family: 'Space Mono', monospace; line-height: 1.6; }
+
+  /* ── LAYER TOGGLE BUTTONS ── */
+  .layer-toggle {
+    padding: 4px 14px; border-radius: 4px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; font-family: 'Barlow Condensed', sans-serif;
+    cursor: pointer; background: var(--panel2); border: 1px solid var(--border);
+    color: var(--muted); transition: all 0.15s; user-select: none;
+  }
+  .layer-toggle.active { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
+
+  /* ── HELP SECTIONS ── */
+  .help-section { margin-bottom: 14px; }
+  .help-heading { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent2); margin-bottom: 4px; }
+  .help-section p { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0; }
+  .help-section p b { color: var(--text); }
 </style>
 </head>
 <body>
@@ -228,6 +244,9 @@
   <div id="dz-search-wrap">
     <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
     <div id="dz-search-icon" onclick="expandSearch()" title="Search drop zones">🔍</div>
+    <div onclick="toggleOverlay('help')" title="Help"
+      style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+      color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;font-weight:700;">?</div>
     <div id="dz-dropdown"></div>
   </div>
 </div>
@@ -247,7 +266,7 @@
 
 <!-- ICON BAR -->
 <div id="icon-bar">
-  <div class="map-icon-btn active" id="btn-labels"   onclick="toggleLabels()"          title="Toggle leg labels">🏷️</div>
+  <div class="map-icon-btn active" id="btn-labels"   onclick="toggleOverlay('labels')"   title="Layers">🏷️</div>
   <div class="map-icon-btn" id="btn-settings" onclick="toggleOverlay('settings')" title="Settings">🪂</div>
   <div class="map-icon-btn" id="btn-winds"    onclick="toggleOverlay('winds')"    title="Winds aloft">💨</div>
 </div>
@@ -354,6 +373,102 @@
   </div>
 </div>
 
+<!-- LAYERS OVERLAY -->
+<div class="overlay-panel" id="overlay-labels">
+  <div class="overlay-header">
+    <h2>Layers</h2>
+    <button class="overlay-close" onclick="closeOverlay('labels')">✕</button>
+  </div>
+  <div class="overlay-body">
+    <div class="field-note" style="margin-bottom:10px;">Toggle map layers on and off.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:600;color:var(--text);">Jump Run</span>
+        <div id="layer-jumpRun" class="layer-toggle active" onclick="toggleLayer('jumpRun')">On</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:600;color:var(--text);">Exit Region</span>
+        <div id="layer-exitRegion" class="layer-toggle active" onclick="toggleLayer('exitRegion')">On</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:600;color:var(--text);">Canopy Regions</span>
+        <div id="layer-canopyRegions" class="layer-toggle active" onclick="toggleLayer('canopyRegions')">On</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:600;color:var(--text);">Pattern Labels</span>
+        <div id="layer-patternLabels" class="layer-toggle active" onclick="toggleLayer('patternLabels')">On</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HELP OVERLAY -->
+<div class="overlay-panel" id="overlay-help" style="width:min(360px,calc(100vw - 72px));max-height:calc(100vh - var(--header-h) - 62px);">
+  <div class="overlay-header">
+    <h2>Help</h2>
+    <button class="overlay-close" onclick="closeOverlay('help')">✕</button>
+  </div>
+  <div class="overlay-body" style="font-size:12px;line-height:1.6;color:var(--text);">
+
+    <div class="help-section">
+      <div class="help-heading">Getting Started</div>
+      <p>Tap anywhere on the map to set a landing target. The app fetches winds aloft for that location and draws a suggested landing pattern. Tap again to move the target.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Final Heading</div>
+      <p>The heading bar at the bottom controls the final approach direction. By default it points into the surface wind. Drag the slider to override. The yellow pyramid marks the into-wind heading — tap it to snap back.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Pattern</div>
+      <p><b>Drifting:</b> base leg is steered 90° to final and wind carries the canopy to the turn point. <b>Traditional:</b> base leg crabs into wind to hold a true 90° ground track. Toggle L/R hand in the heading bar. Pattern altitudes are set in Settings.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Canopy Performance</div>
+      <p>Enter glide ratio, horizontal speed, and vertical speed — any two calculates the third. Use still-air, no-wind values. Vertical speed equals sink rate (FlySight reports this directly).</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Safety Regions (Canopy)</div>
+      <p>Three amber shaded rings around the pattern entry point show where a canopy pilot must be at each altitude to reach the entry point. They shift upwind to account for drift. Region Buffer shrinks them by a percentage for a safety margin.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Safety Regions (Opening &amp; Exit)</div>
+      <p>The yellow ring shows where a pilot must open to reach pattern entry under canopy. The blue dashed ring shows where a pilot must exit the aircraft to open within the opening region. Freefall drift is calculated using actual winds aloft at each altitude band.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Jump Run</div>
+      <p>A suggested jump run is drawn through the exit region center, into the wind at exit altitude. The blue dashed line shows the track. The heading slider in Settings overrides the auto heading — the teal pyramid marks the into-wind position.</p>
+      <p style="margin-top:4px;"><b>Offset:</b> perpendicular distance from the landing spot to the jump run. Shown in muted color when auto-calculated. Enter a value to override (positive = right of flight path).</p>
+      <p style="margin-top:4px;"><b>🟢 Green light:</b> where the jump run enters the exit circle — distance prior to or past the projected landing spot reference. <b>🔴 Red light:</b> where the jump run exits the exit circle.</p>
+      <p style="margin-top:4px;"><b>Exit separation:</b> suggested seconds between groups based on horizontal separation distance and jump run ground speed.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Winds Aloft</div>
+      <p>Winds are fetched from Open-Meteo using GFS+HRRR (US) or GFS (international). Teal rows are real model data points. Grey rows are interpolated. The surface wind comes from the HRRR 10m wind at the current hour. Data updates hourly for US locations.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Layers</div>
+      <p>Use the 🏷️ button to toggle individual map layers — jump run, exit region, canopy regions, and pattern labels — independently.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Drop Zone Search</div>
+      <p>Tap 🔍 to search for a drop zone by name. Results come from the USPA dropzone database. Selecting a DZ sets the map view and landing target to that location.</p>
+    </div>
+
+    <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;">
+      Pattern Planner · Wind data: open-meteo.com · DZ data: USPA
+    </div>
+  </div>
+</div>
+
 <!-- WINDS OVERLAY -->
 <div class="overlay-panel" id="overlay-winds">
   <div class="overlay-header">
@@ -388,7 +503,8 @@ const state = {
   winds: [],
   surfaceWind: null,
   pattern: null,
-  labelsVisible: true,
+  labelsVisible: true, // always true; individual layers controlled by state.layers
+  layers: { jumpRun:true, exitRegion:true, canopyRegions:true, patternLabels:true },
   fitDone: false,
   patternType: 'drifting',
 };
@@ -460,28 +576,22 @@ function toggleOverlay(name) {
   const panel  = document.getElementById(`overlay-${name}`);
   const btn    = document.getElementById(`btn-${name}`);
   const isOpen = panel.classList.contains('open');
+  // Close all panels first
   document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('open'));
-  document.getElementById('btn-settings').classList.remove('active');
-  document.getElementById('btn-winds').classList.remove('active');
+  document.querySelectorAll('.map-icon-btn').forEach(b => {
+    if (b.id !== 'btn-labels') b.classList.remove('active');
+  });
   if (!isOpen) {
     panel.classList.add('open');
     btn.classList.add('active');
-    // Re-measure pyramid positions after panel is visible
     setTimeout(() => { updateWindPyramid(); updateJrPyramid(); }, 50);
   }
 }
 function closeOverlay(name) {
   document.getElementById(`overlay-${name}`).classList.remove('open');
-  document.getElementById(`btn-${name}`).classList.remove('active');
+  const btn = document.getElementById(`btn-${name}`);
+  if (btn) btn.classList.remove('active');
 }
-// Tap outside closes overlays — preserve labels button state
-document.addEventListener('click', e => {
-  if (!e.target.closest('.overlay-panel') && !e.target.closest('.map-icon-btn') && !e.target.closest('#dz-search-wrap')) {
-    document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('open'));
-    document.getElementById('btn-settings').classList.remove('active');
-    document.getElementById('btn-winds').classList.remove('active');
-  }
-});
 
 // ─── MAP ─────────────────────────────────────────────────────────────────────
 const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([36.0, -86.5], 13);
@@ -1247,11 +1357,9 @@ function drawPattern() {
   addL(L.marker(ll(tFinal), {icon:pinIcon('#e8f44d'), zIndexOffset:100}));
 
   if (state.labelsVisible) {
-    // ── Safety zones ──
-    // All circles are centered at entry point shifted upwind by accumulated drift.
-    // Safety margin shrinks each radius by safetyPct.
-    const dRate    = (p.cSpd / p.glide) * 101.269; // ft/min canopy descent
-    const margin   = 1 - p.safetyPct;               // e.g. 0.90 for 10% margin
+    // ── Shared zone helpers (used by canopy/exit regions) ──
+    const dRate  = (p.cSpd / p.glide) * 101.269;
+    const margin = 1 - p.safetyPct;
 
     // Helper: compute integrated wind drift (ft N, ft E) while descending
     // from altTopAGL to altBotAGL at a given descent rate (ft/min).
@@ -1334,8 +1442,17 @@ function drawPattern() {
       }));
     }
 
-    // ── Pattern entry rings (opening alt → pattern entry, divided into thirds) ──
-    const canopyRange = p.altOpen - p.altE;
+    // ── Shared geometry (always computed, used by multiple layers) ──
+    const canopyRange   = p.altOpen - p.altE;
+    const openDrift     = integratedDrift(p.altOpen, p.altE, dRate);
+    const openRadiusFt  = canopyRange * p.glide;
+    const openCtr       = offsetLL(entry.lat, entry.lng, -openDrift.dN, -openDrift.dE);
+    const ffRateFtMin2  = p.ffSpeedMph * 88;
+    const ffDrift2      = integratedDrift(p.altExit, p.altOpen, ffRateFtMin2);
+    const exitCenter    = offsetLL(openCtr.lat, openCtr.lng, -ffDrift2.dN, -ffDrift2.dE);
+
+    // ── Pattern entry rings + opening ring ──
+    if (state.layers.canopyRegions) {
     const hStep3 = canopyRange / 3;
     const ringColors = [
       {fill:'rgba(255,160,40,1)', border:'rgba(255,180,60,0.85)', fillOp:0.18, bw:2},
@@ -1355,7 +1472,6 @@ function drawPattern() {
         rc.border, rc.fill, rc.fillOp, 1, rc.bw
       );
       const avg    = avgWindInBand(botAGL, topAGL);
-      // avg.dir is already wind velocity direction (where wind goes)
       const altLabel = Math.round(p.altE + h).toLocaleString();
       zoneLabel(ctr, h * p.glide,
         `${altLabel}ft · ${avg.spd}kt`,
@@ -1364,10 +1480,7 @@ function drawPattern() {
     });
 
     // ── Opening altitude ring ──
-    const openDrift    = integratedDrift(p.altOpen, p.altE, dRate);
-    const openRadiusFt = canopyRange * p.glide;
-    const openCtr      = offsetLL(entry.lat, entry.lng, -openDrift.dN, -openDrift.dE);
-    const openAvg      = avgWindInBand(p.altE, p.altOpen);
+    const openAvg = avgWindInBand(p.altE, p.altOpen);
     addL(L.circle([openCtr.lat, openCtr.lng], {
       radius: openRadiusFt * margin * 0.3048,
       color: 'rgba(255,210,80,0.95)', weight: 2.5,
@@ -1377,21 +1490,23 @@ function drawPattern() {
       `Open ${p.altOpen.toLocaleString()}ft · ${openAvg.spd}kt`,
       'rgba(255,220,100,1)', openAvg.dir);
 
-    // ── Exit ring (dashed, no fill) ──
-    const ffRateFtMin  = p.ffSpeedMph * 88;
-    const ffDrift      = integratedDrift(p.altExit, p.altOpen, ffRateFtMin);
-    const exitCenter   = offsetLL(openCtr.lat, openCtr.lng, -ffDrift.dN, -ffDrift.dE);
-    const ffAvg        = avgWindInBand(p.altOpen, p.altExit);
-    addL(L.circle([exitCenter.lat, exitCenter.lng], {
-      radius: openRadiusFt * margin * 0.3048,
-      color: 'rgba(160,220,255,0.95)', weight: 2.5,
-      fill: false, interactive: false, dashArray: '8 5',
-    }));
-    zoneLabel(exitCenter, openRadiusFt,
-      `Exit ${p.altExit.toLocaleString()}ft · ${ffAvg.spd}kt`,
-      'rgba(180,230,255,1)', ffAvg.dir);
+    } // end canopyRegions
+
+    // ── Exit ring ──
+    if (state.layers.exitRegion) {
+      const ffAvg = avgWindInBand(p.altOpen, p.altExit);
+      addL(L.circle([exitCenter.lat, exitCenter.lng], {
+        radius: openRadiusFt * margin * 0.3048,
+        color: 'rgba(160,220,255,0.95)', weight: 2.5,
+        fill: false, interactive: false, dashArray: '8 5',
+      }));
+      zoneLabel(exitCenter, openRadiusFt,
+        `Exit ${p.altExit.toLocaleString()}ft · ${ffAvg.spd}kt`,
+        'rgba(180,230,255,1)', ffAvg.dir);
+    }
 
     // ── Jump run line ──
+    if (state.layers.jumpRun) {
     const jrVec      = hdgVec(p.jrHdg);
     const jrRightVec = {n: jrVec.e, e: -jrVec.n}; // 90° right of heading
 
@@ -1496,8 +1611,10 @@ function drawPattern() {
       }),
       interactive:false, zIndexOffset:45
     }));
+    } // end jumpRun
 
-    // Turn altitude labels
+    // Turn altitude labels + leg labels
+    if (state.layers.patternLabels) {
     const turnLabelIcon = (txt, color) => L.divIcon({
       html:`<div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;
         color:${color};text-shadow:0 1px 4px #000,0 0 8px #000;white-space:nowrap;
@@ -1524,7 +1641,8 @@ function drawPattern() {
     addL(L.marker(ll(dwMid), {icon:legLabel(p.dDisp, p.dWC, '#f4944d'), interactive:false, zIndexOffset:50}));
     addL(L.marker(ll(bMid),  {icon:legLabel(p.bDisp, p.bWC, '#4df4c8'), interactive:false, zIndexOffset:50}));
     addL(L.marker(ll(fMid),  {icon:legLabel(p.fDisp, p.fWC, '#e8f44d'), interactive:false, zIndexOffset:50}));
-  }
+    } // end patternLabels
+  } // end labelsVisible
 
   // Wind arrow
   const wSfc = getWindAtAGL(0), ws = vecLen(wSfc);
@@ -1559,9 +1677,13 @@ function drawPattern() {
 }
 
 // ─── LABELS TOGGLE ───────────────────────────────────────────────────────────
-function toggleLabels() {
-  state.labelsVisible = !state.labelsVisible;
-  document.getElementById('btn-labels').classList.toggle('active', state.labelsVisible);
+function toggleLayer(name) {
+  state.layers[name] = !state.layers[name];
+  const el = document.getElementById(`layer-${name}`);
+  if (el) {
+    el.classList.toggle('active', state.layers[name]);
+    el.textContent = state.layers[name] ? 'On' : 'Off';
+  }
   if (state.pattern) drawPattern();
 }
 
