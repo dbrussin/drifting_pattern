@@ -539,7 +539,7 @@
     <div class="help-section">
       <div class="help-heading">Getting Started</div>
       <p>Tap anywhere on the map to set a landing target. The app fetches winds aloft for that location and draws a suggested landing pattern. Tap again to move the target.</p>
-      <p style="margin-top:4px;">Tap 🔍 to search. Type a drop zone name to find it in the USPA database, or type any city, address, or landmark to move the map there. Either way, selecting a result places the landing target at that location.</p>
+      <p style="margin-top:4px;">Tap 🔍 to search. Type a drop zone name to find it in the USPA database, or type any city, address, or landmark to move the map there. Search navigates the map to that location — tap the map to set the landing target once you've found the right spot.</p>
     </div>
 
     <div class="help-section">
@@ -702,9 +702,9 @@
     <div class="wind-header"><span>Alt AGL</span><span>Dir °T</span><span>Spd kts</span><span>°C</span></div>
     <div id="wind-rows"></div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;line-height:1.6;">
-      Source: <a href="https://open-meteo.com" target="_blank" style="color:var(--accent2);text-decoration:none;">open-meteo.com</a> GFS+HRRR (US).<br>
-      HRRR updates hourly · same source as Schulze winds aloft.<br>
-      SFC/262/394/591ft: real data · others interpolated.
+      Source: <a href="https://open-meteo.com" target="_blank" style="color:var(--accent2);text-decoration:none;">open-meteo.com</a> GFS.<br>
+      Teal rows: real model data · Grey rows: interpolated.<br>
+      Values are editable — tap any cell to adjust.
     </div>
   </div>
 </div>
@@ -978,14 +978,7 @@ async function fetchWinds(forceRefresh=false) {
     const url = `https://api.open-meteo.com/v1/gfs?latitude=${lat}&longitude=${lng}&hourly=${plWindVars},${plHgtVars},${plTmpVars},${htVars},windspeed_10m,winddirection_10m&wind_speed_unit=kn&forecast_days=2&timezone=auto`;
     const rawData = await (await fetch(url)).json();
 
-    // Fetch MSL elevation for this location
-    let fieldElevFt = state.fieldElevFt || 0;
-    try {
-      const elevUrl = `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`;
-      const elevData = await (await fetch(elevUrl)).json();
-      if (elevData.elevation?.[0] != null) fieldElevFt = Math.round(elevData.elevation[0] * 3.28084);
-    } catch(e) {}
-
+    const fieldElevFt = state.fieldElevFt || 0;
     const ts = Date.now();
     windCache[cacheKey(lat,lng)] = {rawData, fieldElevFt, loc:{lat,lng}, ts};
     state.fieldElevFt = fieldElevFt;
@@ -1694,13 +1687,6 @@ function calculate() {
   const dwDrift = hdgDiff(dwHdg,      trackHdgDeg(dDisp));
 
   // ── Wind components ──
-  function windComp(legHdgDeg, disp) {
-    // Component of wind along actual ground track direction
-    const trackUnit = normalize(disp);
-    const w = getWindAtAGL(0); // approximate — could use leg-specific wind
-    return Math.round(w.n*trackUnit.n + w.e*trackUnit.e);
-  }
-  // ── Wind components — compute both along-track and cross-track for each leg ──
   function safeWC(w, unitVec) {
     if (!isFinite(w.n) || !isFinite(w.e)) return 0;
     return Math.round(w.n*unitVec.n + w.e*unitVec.e);
@@ -2199,17 +2185,22 @@ function showDd(results){
 function closeDd(){dzDd.classList.remove('open');dzDd.innerHTML='';}
 async function pickDZ(dz){
   closeDd();
+  collapseSearch();
   if(dz.geo){
     try{
       const r=await(await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dzEl.value.trim())}&format=json&limit=5`)).json();
       if(!r.length){setStatus('Location not found');return;}
-      if(r.length===1){dzEl.value=r[0].display_name.split(',').slice(0,2).join(',');map.setView([+r[0].lat,+r[0].lon],14);}
-      else showDd(r.map(x=>({name:x.display_name.split(',')[0],city:x.display_name.split(',').slice(1,3).join(',').trim(),state:'',lat:+x.lat,lng:+x.lon})));
+      if(r.length===1){
+        dzEl.value=r[0].display_name.split(',').slice(0,2).join(',');
+        map.setView([+r[0].lat,+r[0].lon],14);
+      } else {
+        showDd(r.map(x=>({name:x.display_name.split(',')[0],city:x.display_name.split(',').slice(1,3).join(',').trim(),state:'',lat:+x.lat,lng:+x.lon})));
+      }
     }catch(e){setStatus('Geocode failed');}
     return;
   }
-  dzEl.value=dz.name; map.setView([dz.lat,dz.lng],15);
-  collapseSearch();
+  dzEl.value=dz.name;
+  map.setView([dz.lat,dz.lng],15);
 }
 
 // ─── WAIVER ───────────────────────────────────────────────────────────────────
@@ -2284,7 +2275,7 @@ function loadSettings() {
     }
 
     // Layer visibility — directly set state and update buttons
-    // Done last so setHand/setPatternType don't clobber pp_layers via saveSettings
+    // Done last so setHand/setLegMode don't clobber pp_layers via saveSettings
     const layersStr = localStorage.getItem(storageKey('layers'));
     if (layersStr) {
       const saved = JSON.parse(layersStr);
