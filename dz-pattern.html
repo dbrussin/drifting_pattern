@@ -538,19 +538,20 @@
 
     <div class="help-section">
       <div class="help-heading">Getting Started</div>
-      <p>Tap anywhere on the map to set a landing target. The app fetches winds aloft for that location and draws a suggested landing pattern. Tap again to move the target. Use 🔍 to search for a drop zone by name.</p>
+      <p>Tap anywhere on the map to set a landing target. The app fetches winds aloft for that location and draws a suggested landing pattern. Tap again to move the target.</p>
+      <p style="margin-top:4px;">Tap 🔍 to search. Type a drop zone name to find it in the USPA database, or type any city, address, or landmark to move the map there. Either way, selecting a result places the landing target at that location.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Final Heading</div>
-      <p>The heading bar at the bottom controls the final approach direction. By default it snaps to the surface wind direction. Drag the slider or tap the number field to type a heading directly. The yellow pyramid marks the into-wind heading — tap it to snap back. Toggle L/R hand pattern with the L/R buttons.</p>
+      <p>The heading bar at the bottom controls the final approach direction. By default it snaps to the surface wind direction. Drag the slider or tap the number field to type a heading directly. The <span style="color:var(--accent)">▲</span> marks the into-wind heading — tap it to snap back. Toggle L/R hand pattern with the L/R buttons.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Pattern Legs</div>
       <p>Each leg — Downwind (orange), Base (teal), Final (yellow) — has an independent <b>Crab</b> or <b>Drift</b> setting.</p>
       <p style="margin-top:4px;"><b>Crab:</b> the app solves for a steered heading that produces the target ground track, accounting for wind. A dashed white line shows the steered heading direction when it differs meaningfully from the ground track.</p>
-      <p style="margin-top:4px;"><b>Drift:</b> the canopy is steered on a nominal heading and the wind carries it to the turn point. No crab correction is applied.</p>
+      <p style="margin-top:4px;"><b>Drift:</b> the canopy is steered on a nominal heading and the wind carries it toward the turn point. A dashed white line shows the steered heading direction when wind drift is significant.</p>
       <p style="margin-top:4px;">Defaults: Downwind = Crab, Base = Drift, Final = Crab.</p>
       <p style="margin-top:4px;"><b>Z Pattern:</b> a checkbox on the Downwind leg. When enabled, the first leg flies upwind (toward the DZ) rather than downwind — used when the jumper exits far downwind of the target and needs to fly back toward it before turning base. Z pattern is independent of the Crab/Drift setting.</p>
     </div>
@@ -573,12 +574,12 @@
 
     <div class="help-section">
       <div class="help-heading">Safety Regions (Opening &amp; Exit)</div>
-      <p>The yellow ring shows where a pilot must open to reach pattern entry under canopy. The blue dashed ring shows where the pilot must exit the aircraft to open within the opening region. Freefall drift is integrated across altitude bands using actual winds aloft at each level.</p>
+      <p>The yellow ring shows where a pilot must open to reach pattern entry under canopy. The blue dashed ring shows where the pilot must exit the aircraft to open within the opening region. Freefall drift is integrated across altitude bands using actual winds aloft at each level, assuming purely vertical descent — results are not applicable to tracking, angle, or movement dives.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Jump Run</div>
-      <p>A suggested jump run is drawn through the exit region center, into the wind at exit altitude. The teal pyramid in the heading slider marks the into-wind position — tap it to snap. The heading field is also directly editable.</p>
+      <p>A suggested jump run is drawn through the exit region center, into the wind at exit altitude. The <span style="color:var(--accent2)">▲</span> marks the into-wind heading — tap it to snap. The heading field is also directly editable.</p>
       <p style="margin-top:4px;"><b>Offset:</b> perpendicular distance from the landing spot to the jump run line. Auto-calculated when blank (shown in muted color). Enter a value to override — positive is right of flight path looking forward. Delete the value to return to auto.</p>
       <p style="margin-top:4px;"><b>🟢/🔴:</b> distances prior to and past the foot of perpendicular from the landing target to the jump run line, measured at the exit circle boundary. Positive = prior to (upwind of) the reference point.</p>
       <p style="margin-top:4px;"><b>Exit separation:</b> suggested time between groups based on the exit separation distance setting and jump run ground speed.</p>
@@ -586,19 +587,19 @@
 
     <div class="help-section">
       <div class="help-heading">Winds Aloft</div>
-      <p>Winds are fetched from Open-Meteo (GFS for all locations). Teal rows are real model data points at pressure levels or fixed heights; grey rows are interpolated between them. The surface wind comes from the 10m wind field.</p>
-      <p style="margin-top:4px;">The <b>Forecast</b> slider lets you view winds up to +12 hours ahead. The effective forecast time appears in the center of the title bar — in muted color for current hour, teal for a future hour. Changing the forecast slider re-processes the cached data with no new network request. Moving to a new location resets to the current hour.</p>
-      <p style="margin-top:4px;">Pull down from the top of the map to refresh wind data.</p>
+      <p>Winds are fetched from Open-Meteo (GFS). Teal rows are real model data points at pressure levels or fixed heights; grey rows are interpolated. The surface wind comes from the 10m wind field. Winds refresh automatically every 20 minutes while the app is open. Individual values in the wind table can be edited manually to test different wind scenarios.</p>
+      <p style="margin-top:4px;">The <b>Forecast</b> slider lets you view winds up to +12 hours ahead. The effective forecast time appears in the center of the title bar — muted for current hour, teal for a future hour. Moving to a new location resets the forecast to the current hour.</p>
+      <p style="margin-top:4px;">Pull down from the title bar to manually refresh wind data.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Display Options (👁)</div>
-      <p>Toggle individual map layers on and off: Jump Run, Exit Region, Canopy Regions, Pattern Labels, and Map Legend. Settings are saved between sessions.</p>
+      <p>Toggle individual map layers on and off: Jump Run, Exit Region, Canopy Regions, Pattern Labels, and Map Legend. The map legend shows the color coding for each leg and explains the dashed white line (steered heading). Settings are saved between sessions.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Settings Persistence</div>
-      <p>All settings are automatically saved to your device and restored on next visit. Use <b>Reset All Settings &amp; Clear Data</b> at the bottom of Settings to wipe everything and start fresh — this also clears your terms agreement so you will be asked to agree again.</p>
+      <p>All settings are automatically saved and restored on next visit. Settings that depend on wind or location — final heading and jump run heading — are not saved and re-derive from wind data on each visit. Use <b>Reset All Settings &amp; Clear Data</b> at the bottom of Settings to wipe everything and start fresh, including your terms agreement.</p>
     </div>
 
     <div class="help-section">
