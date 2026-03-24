@@ -227,6 +227,14 @@
   }
   .layer-toggle.active { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
 
+  /* ── LEG MODE BUTTONS ── */
+  .leg-mode-btn {
+    padding: 4px 8px; background: transparent; border: none; color: var(--muted);
+    font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s;
+  }
+  .leg-mode-btn.active { background: var(--accent); color: var(--bg); }
+
   /* ── PULL TO REFRESH ── */
   #pull-indicator {
     position: fixed; top: var(--header-h); left: 50%; transform: translateX(-50%) translateY(-100%);
@@ -287,7 +295,11 @@
 <!-- HEADING BAR — persistent bottom -->
 <div id="heading-bar">
   <div id="heading-bar-label">Final Hdg</div>
-  <div id="heading-bar-val">---°</div>
+  <input type="number" id="heading-bar-val" min="0" max="359" step="1"
+    style="font-family:'Space Mono',monospace;font-size:13px;color:var(--accent);
+    background:transparent;border:none;border-bottom:1px solid var(--border);
+    width:42px;text-align:center;padding:2px 0;"
+    oninput="onHeadingInput(this.value)">
   <div id="heading-bar-slider-wrap">
     <input type="range" id="heading-bar-slider" min="0" max="359" step="1" value="0" oninput="onHeadingSlider(this.value)">
     <div id="wind-pyramid"></div>
@@ -342,7 +354,11 @@
     <div id="jr-heading-row" style="display:flex;align-items:center;gap:8px;margin-top:8px;
       padding:8px 10px;background:var(--panel2);border-radius:4px;border:1px solid var(--border);">
       <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;flex-shrink:0;">Jump Run</span>
-      <span id="jr-hdg-display" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--accent2);min-width:36px;flex-shrink:0;">---°</span>
+      <input type="number" id="jr-hdg-display" min="0" max="359" step="1"
+        style="font-family:'Space Mono',monospace;font-size:13px;color:var(--accent2);
+        background:transparent;border:none;border-bottom:1px solid var(--border);
+        width:42px;text-align:center;padding:2px 0;flex-shrink:0;"
+        oninput="onJrHdgInput(this.value)">
       <div style="flex:1;position:relative;padding-bottom:10px;min-width:0;">
         <input type="range" id="jr-hdg-slider" min="0" max="359" step="1" value="0"
           style="width:100%;accent-color:var(--accent2);display:block;"
@@ -358,14 +374,81 @@
       </div>
     </div>
 
-    <div class="section-label">Pattern Type</div>
-    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:4px;">
-      <button id="pat-drifting"    onclick="setPatternType('drifting')"    style="flex:1;padding:8px 4px;background:var(--accent);color:var(--bg);border:none;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer;">Drifting</button>
-      <button id="pat-traditional" onclick="setPatternType('traditional')" style="flex:1;padding:8px 4px;background:transparent;color:var(--muted);border:none;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer;">Traditional</button>
+    <div class="section-label">Pattern Legs</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <!-- Downwind leg -->
+      <div style="background:var(--panel2);border-radius:6px;padding:8px 10px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#f4944d;flex-shrink:0;"></div>
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text);flex:1;">Downwind</span>
+          <div style="display:flex;border:1px solid var(--border);border-radius:3px;overflow:hidden;">
+            <button id="dw-crab" class="leg-mode-btn active" onclick="setLegMode('dw','crab')">Crab</button>
+            <button id="dw-drift" class="leg-mode-btn" onclick="setLegMode('dw','drift')">Drift</button>
+            <button id="dw-z" class="leg-mode-btn" onclick="setLegMode('dw','z')">Z</button>
+          </div>
+        </div>
+        <div id="dw-perf-toggle" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <label style="font-size:10px;color:var(--muted);flex:1;">Custom performance</label>
+          <input type="checkbox" id="dw-custom-perf" onchange="updatePerfSections()">
+        </div>
+        <div id="dw-perf" style="display:none;">
+          <div class="input-grid" style="margin-top:4px;">
+            <div class="input-group"><label>Glide (:1)</label><input type="number" id="dw-glide" value="2.5" min="1" max="10" step="0.1" oninput="onLegCanopyInput('dw','glide')"></div>
+            <div class="input-group"><label>Horiz (kts)</label><input type="number" id="dw-speed" value="28" min="10" max="60" step="0.5" oninput="onLegCanopyInput('dw','speed')"></div>
+            <div class="input-group"><label>Vert (kts)</label><input type="number" id="dw-sink" value="" min="1" max="30" step="0.1" placeholder="calc" oninput="onLegCanopyInput('dw','sink')"></div>
+          </div>
+          <div class="field-note" id="dw-perf-note"></div>
+        </div>
+      </div>
+      <!-- Base leg -->
+      <div style="background:var(--panel2);border-radius:6px;padding:8px 10px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#4df4c8;flex-shrink:0;"></div>
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text);flex:1;">Base</span>
+          <div style="display:flex;border:1px solid var(--border);border-radius:3px;overflow:hidden;">
+            <button id="b-crab" class="leg-mode-btn" onclick="setLegMode('b','crab')">Crab</button>
+            <button id="b-drift" class="leg-mode-btn active" onclick="setLegMode('b','drift')">Drift</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <label style="font-size:10px;color:var(--muted);flex:1;">Custom performance</label>
+          <input type="checkbox" id="b-custom-perf" onchange="updatePerfSections()">
+        </div>
+        <div id="b-perf" style="display:none;">
+          <div class="input-grid" style="margin-top:4px;">
+            <div class="input-group"><label>Glide (:1)</label><input type="number" id="b-glide" value="2.5" min="1" max="10" step="0.1" oninput="onLegCanopyInput('b','glide')"></div>
+            <div class="input-group"><label>Horiz (kts)</label><input type="number" id="b-speed" value="28" min="10" max="60" step="0.5" oninput="onLegCanopyInput('b','speed')"></div>
+            <div class="input-group"><label>Vert (kts)</label><input type="number" id="b-sink" value="" min="1" max="30" step="0.1" placeholder="calc" oninput="onLegCanopyInput('b','sink')"></div>
+          </div>
+          <div class="field-note" id="b-perf-note"></div>
+        </div>
+      </div>
+      <!-- Final leg -->
+      <div style="background:var(--panel2);border-radius:6px;padding:8px 10px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#e8f44d;flex-shrink:0;"></div>
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text);flex:1;">Final</span>
+          <div style="display:flex;border:1px solid var(--border);border-radius:3px;overflow:hidden;">
+            <button id="f-crab" class="leg-mode-btn active" onclick="setLegMode('f','crab')">Crab</button>
+            <button id="f-drift" class="leg-mode-btn" onclick="setLegMode('f','drift')">Drift</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <label style="font-size:10px;color:var(--muted);flex:1;">Custom performance</label>
+          <input type="checkbox" id="f-custom-perf" onchange="updatePerfSections()">
+        </div>
+        <div id="f-perf" style="display:none;">
+          <div class="input-grid" style="margin-top:4px;">
+            <div class="input-group"><label>Glide (:1)</label><input type="number" id="f-glide" value="2.5" min="1" max="10" step="0.1" oninput="onLegCanopyInput('f','glide')"></div>
+            <div class="input-group"><label>Horiz (kts)</label><input type="number" id="f-speed" value="28" min="10" max="60" step="0.5" oninput="onLegCanopyInput('f','speed')"></div>
+            <div class="input-group"><label>Vert (kts)</label><input type="number" id="f-sink" value="" min="1" max="30" step="0.1" placeholder="calc" oninput="onLegCanopyInput('f','sink')"></div>
+          </div>
+          <div class="field-note" id="f-perf-note"></div>
+        </div>
+      </div>
     </div>
-    <div class="field-note" id="pattern-type-note">Base leg: steered 90° to final, wind drift carries you to turn point.</div>
 
-    <div class="section-label">Canopy Performance (still air, no wind)</div>
+    <div class="section-label">Default Canopy Performance (still air, no wind)</div>
     <div class="input-grid">
       <div class="input-group">
         <label>Glide Ratio (:1)</label>
@@ -381,7 +464,7 @@
       </div>
     </div>
     <div class="field-note" id="canopy-calc-note"></div>
-    <div class="field-note" style="margin-top:4px;">Enter any two — third is calculated. Vertical speed = sink rate in still air (e.g. from FlySight). All values are knots.</div>
+    <div class="field-note" style="margin-top:4px;">Enter any two — third is calculated. Used for all legs unless overridden above.</div>
 
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
       <button onclick="resetAllSettings()" style="
@@ -581,6 +664,12 @@
   <div class="overlay-body">
     <button class="fetch-btn" id="fetch-btn" onclick="fetchWinds(true).then(calculate)" disabled>⬇ Refresh Winds</button>
     <div class="fetch-status" id="fetch-status">Set landing point on map first</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;flex-shrink:0;">Forecast</span>
+      <input type="range" id="forecast-offset" min="0" max="12" step="1" value="0"
+        style="flex:1;accent-color:var(--accent2);" oninput="onForecastOffsetChange(this.value)">
+      <span id="forecast-offset-label" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent2);white-space:nowrap;min-width:32px;text-align:right;">Now</span>
+    </div>
     <div class="wind-header"><span>Alt AGL</span><span>Dir °T</span><span>Spd kts</span><span>°C</span></div>
     <div id="wind-rows"></div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;line-height:1.6;">
@@ -606,17 +695,21 @@ const state = {
   winds: [],
   surfaceWind: null,
   pattern: null,
-  labelsVisible: true, // always true; individual layers controlled by state.layers
+  labelsVisible: true,
+  forecastOffset: 0,
   layers: { jumpRun:true, exitRegion:true, canopyRegions:true, patternLabels:true, legend:true },
   fitDone: false,
-  patternType: 'drifting',
+  // Per-leg modes: 'crab' | 'drift' | 'z' (z only valid for downwind)
+  legModes: { dw: 'crab', b: 'drift', f: 'crab' },
+  // Per-leg custom canopy performance
+  legCustomPerf: { dw: false, b: false, f: false },
 };
 
 // Wind cache — keyed by rounded lat/lng, expires after CACHE_MS
 const CACHE_MS = 20 * 60 * 1000; // 20 minutes
 
 // ─── SETTINGS PERSISTENCE ─────────────────────────────────────────────────────
-// Declared early so saveSettings() is available to setHand, setPatternType, toggleLayer
+// Declared early so saveSettings() is available to setHand, setLegMode, toggleLayer
 const STORAGE_VERSION = '1';
 const WAIVER_VERSION  = '1.0';
 function storageKey(k) { return `pp_${k}`; }
@@ -636,8 +729,16 @@ function saveSettings() {
       if (el && el.value !== '') localStorage.setItem(storageKey(id), el.value);
     });
     localStorage.setItem(storageKey('hand'),         state.hand);
-    localStorage.setItem(storageKey('pattern_type'), state.patternType);
     localStorage.setItem(storageKey('layers'),       JSON.stringify(state.layers));
+    localStorage.setItem(storageKey('leg_modes'),    JSON.stringify(state.legModes));
+    localStorage.setItem(storageKey('leg_custom'),   JSON.stringify(state.legCustomPerf));
+    // Per-leg perf inputs
+    ['dw','b','f'].forEach(leg => {
+      ['glide','speed','sink'].forEach(field => {
+        const el = document.getElementById(`${leg}-${field}`);
+        if (el && el.value !== '') localStorage.setItem(storageKey(`${leg}_${field}`), el.value);
+      });
+    });
   } catch(e) { console.warn('saveSettings error:', e); }
 }
 
@@ -663,7 +764,7 @@ function initStorage() {
   } catch(e) {}
 }
 const windCache = {}; // { key: {winds, surfaceWind, fieldElevFt, ts} }
-function cacheKey(lat, lng) { return `${lat.toFixed(2)},${lng.toFixed(2)}`; }
+function cacheKey(lat, lng) { return `${lat.toFixed(2)},${lng.toFixed(2)},${state.forecastOffset||0}`; }
 function distMiles(a, b) {
   const dLat = (a.lat-b.lat) * 69;
   const dLng = (a.lng-b.lng) * 69 * Math.cos(a.lat * Math.PI/180);
@@ -846,7 +947,7 @@ async function fetchWinds(forceRefresh=false) {
     const url = `https://api.open-meteo.com/v1/gfs?latitude=${lat}&longitude=${lng}&hourly=${plWindVars},${plHgtVars},${plTmpVars},${htVars},windspeed_10m,winddirection_10m&wind_speed_unit=kn&forecast_days=1&timezone=auto`;
     const d = await (await fetch(url)).json();
 
-    // Match current hour
+    // Match current hour + forecast offset
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const localHourStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:00`;
@@ -856,6 +957,7 @@ async function fetchWinds(forceRefresh=false) {
       hi = d.hourly.time.reduce((best, t, i) =>
         Math.abs(new Date(t).getTime() - nowMs) < Math.abs(new Date(d.hourly.time[best]).getTime() - nowMs) ? i : best, 0);
     }
+    hi = Math.min(hi + state.forecastOffset, d.hourly.time.length - 1);
 
     // Surface wind
     state.surfaceWind = {
@@ -1008,8 +1110,9 @@ function updateWindStatusAge(ts) {
   const sw = state.surfaceWind;
   const ageMin = Math.round((Date.now() - ts) / 60000);
   const ageStr = ageMin < 1 ? 'just now' : `${ageMin}m ago`;
+  const offsetStr = state.forecastOffset > 0 ? ` · +${state.forecastOffset}h forecast` : '';
   document.getElementById('fetch-status').textContent =
-    `SFC: ${sw.dirDeg}° @ ${sw.speedKts}kt · Elev ${state.fieldElevFt}ft MSL\nLoaded ${ageStr} · teal = real data · grey = interpolated`;
+    `SFC: ${sw.dirDeg}° @ ${sw.speedKts}kt · Elev ${state.fieldElevFt}ft MSL\nLoaded ${ageStr}${offsetStr} · teal = real data · grey = interpolated`;
 }
 
 // Auto-refresh if wind data is stale and page is visible
@@ -1046,6 +1149,13 @@ function onHeadingSlider(v) {
   updateHeadingDisplay(parseInt(v));
   calculate();
 }
+function onForecastOffsetChange(v) {
+  state.forecastOffset = parseInt(v) || 0;
+  const lbl = document.getElementById('forecast-offset-label');
+  if (lbl) lbl.textContent = state.forecastOffset === 0 ? 'Now' : `+${state.forecastOffset}h`;
+  if (state.target) fetchWinds(true).then(calculate);
+}
+
 function snapToWind() {
   // Always use the exact surface (10m) wind direction — not an interpolated value
   const dir = state.surfaceWind?.dirDeg ?? null;
@@ -1059,10 +1169,19 @@ function snapToWind() {
 function resetHeading() { snapToWind(); }
 
 function updateHeadingDisplay(deg) {
-  const d = Math.round(deg);
-  document.getElementById('heading-bar-val').textContent = d + '°';
+  const d = Math.round(((deg % 360) + 360) % 360);
+  document.getElementById('heading-bar-val').value = d;
   document.getElementById('heading-bar-slider').value = d;
   updateWindPyramid(); updateJrPyramid();
+}
+function onHeadingInput(v) {
+  const d = ((parseInt(v) % 360) + 360) % 360;
+  if (isNaN(d)) return;
+  state.manualHeading = true;
+  state.finalHeadingDeg = d;
+  document.getElementById('heading-bar-slider').value = d;
+  updateWindPyramid();
+  calculate();
 }
 
 function updateWindPyramid() {
@@ -1087,18 +1206,81 @@ function updateWindPyramid() {
   pyrHit.style.display = 'block';
 }
 
-// ─── PATTERN TYPE ─────────────────────────────────────────────────────────────
-function setPatternType(type) {
-  state.patternType = type;
-  document.getElementById('pat-drifting').style.background    = type==='drifting'    ? 'var(--accent)' : 'transparent';
-  document.getElementById('pat-drifting').style.color         = type==='drifting'    ? 'var(--bg)'     : 'var(--muted)';
-  document.getElementById('pat-traditional').style.background = type==='traditional' ? 'var(--accent)' : 'transparent';
-  document.getElementById('pat-traditional').style.color      = type==='traditional' ? 'var(--bg)'     : 'var(--muted)';
-  document.getElementById('pattern-type-note').textContent = type==='drifting'
-    ? 'Base leg: steered 90° to final, wind drift carries you to turn point.'
-    : 'Base leg: crabbed to hold a 90° ground track to final, no intentional drift.';
+// ─── LEG MODES (crab / drift / z) ────────────────────────────────────────────
+function setLegMode(leg, mode) {
+  state.legModes[leg] = mode;
+  // Update button active states for this leg
+  ['crab','drift','z'].forEach(m => {
+    const btn = document.getElementById(`${leg}-${m}`);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
   saveSettings();
   if (state.pattern) calculate();
+}
+
+function updatePerfSections() {
+  ['dw','b','f'].forEach(leg => {
+    const cb = document.getElementById(`${leg}-custom-perf`);
+    const section = document.getElementById(`${leg}-perf`);
+    if (cb && section) {
+      state.legCustomPerf[leg] = cb.checked;
+      section.style.display = cb.checked ? 'block' : 'none';
+    }
+  });
+  saveSettings();
+  if (state.pattern) calculate();
+}
+
+// Per-leg canopy three-way calc (same logic as global)
+const legLastEdited = { dw: ['glide','speed'], b: ['glide','speed'], f: ['glide','speed'] };
+
+function onLegCanopyInput(leg, field) {
+  const le = legLastEdited[leg];
+  if (!le.includes(field)) legLastEdited[leg] = [le[1], field];
+  else legLastEdited[leg] = le.filter(f=>f!==field).concat(field);
+  updateLegCanopyCalc(leg);
+  calculate();
+}
+
+function updateLegCanopyCalc(leg) {
+  const g = parseFloat(document.getElementById(`${leg}-glide`)?.value);
+  const s = parseFloat(document.getElementById(`${leg}-speed`)?.value);
+  const k = parseFloat(document.getElementById(`${leg}-sink`)?.value);
+  const noteEl = document.getElementById(`${leg}-perf-note`);
+  const [a, b_] = legLastEdited[leg];
+  const third = ['glide','speed','sink'].find(f => f!==a && f!==b_);
+  const sinkEl  = document.getElementById(`${leg}-sink`);
+  const speedEl = document.getElementById(`${leg}-speed`);
+  const glideEl = document.getElementById(`${leg}-glide`);
+  if (third==='sink' && !isNaN(g) && !isNaN(s)) {
+    const calc = Math.round((s/g)*10)/10;
+    sinkEl.value = calc; sinkEl.style.color='var(--muted)';
+    if (noteEl) noteEl.textContent = `Calculated vertical: ${calc} kts`;
+  } else if (third==='speed' && !isNaN(g) && !isNaN(k)) {
+    const calc = Math.round(k*g*10)/10;
+    speedEl.value = calc; speedEl.style.color='var(--muted)';
+    if (noteEl) noteEl.textContent = `Calculated horiz: ${calc} kts`;
+  } else if (third==='glide' && !isNaN(s) && !isNaN(k)) {
+    const calc = Math.round((s/k)*10)/10;
+    glideEl.value = calc; glideEl.style.color='var(--muted)';
+    if (noteEl) noteEl.textContent = `Calculated glide: ${calc}:1`;
+  } else if (noteEl) noteEl.textContent = '';
+  [['glide',glideEl],['speed',speedEl],['sink',sinkEl]].forEach(([f,el])=>{
+    if (el && legLastEdited[leg].includes(f)) el.style.color='var(--text)';
+  });
+}
+
+// Returns {glide, cSpd} for a given leg, using per-leg override if enabled
+function getLegPerf(leg) {
+  const defaultGlide = parseFloat(document.getElementById('glide').value) || 2.5;
+  const defaultSpd   = parseFloat(document.getElementById('canopy-speed').value) || 28;
+  if (!state.legCustomPerf[leg]) return {glide: defaultGlide, cSpd: defaultSpd};
+  const g = parseFloat(document.getElementById(`${leg}-glide`)?.value);
+  const s = parseFloat(document.getElementById(`${leg}-speed`)?.value);
+  return {
+    glide: isNaN(g) ? defaultGlide : g,
+    cSpd:  isNaN(s) ? defaultSpd  : s,
+  };
 }
 
 // ─── CANOPY INPUT — any two fields calculate the third ────────────────────────
@@ -1174,7 +1356,9 @@ function expandSearch() {
   const el = document.getElementById('dz-search');
   el.value = '';
   document.getElementById('search-bar').classList.add('open');
-  setTimeout(() => el.focus(), 50);
+  // Synchronous focus required for iOS keyboard to open
+  el.focus();
+  el.click();
 }
 
 // ─── LEGEND REVEAL ────────────────────────────────────────────────────────────
@@ -1212,9 +1396,18 @@ function snapJumpRunToWind() {
   calculate();
 }
 function updateJumpRunDisplay(deg) {
-  document.getElementById('jr-hdg-display').textContent = Math.round(deg) + '°';
+  document.getElementById('jr-hdg-display').value = Math.round(deg);
   document.getElementById('jr-hdg-slider').value = Math.round(deg);
   updateJrPyramid();
+}
+function onJrHdgInput(v) {
+  const d = ((parseInt(v) % 360) + 360) % 360;
+  if (isNaN(d)) return;
+  state.manualJumpRun = true;
+  state.jumpRunHdgDeg = d;
+  document.getElementById('jr-hdg-slider').value = d;
+  updateJrPyramid();
+  calculate();
 }
 
 function updateJrPyramid() {
@@ -1275,28 +1468,12 @@ function calculate() {
   const altE   = parseFloat(document.getElementById('alt-enter').value);
   const altB   = parseFloat(document.getElementById('alt-base').value);
   const altF   = parseFloat(document.getElementById('alt-final').value);
-  const altExit   = parseFloat(document.getElementById('alt-exit').value)   || 13500;
-  const altOpen   = parseFloat(document.getElementById('alt-open').value)   || 3000;
-  const ffSpeedMph= parseFloat(document.getElementById('ff-speed').value)   || 120;
-  const safetyPct = (parseFloat(document.getElementById('safety-margin').value) || 0) / 100;
+  const altExit    = parseFloat(document.getElementById('alt-exit').value)   || 13500;
+  const altOpen    = parseFloat(document.getElementById('alt-open').value)   || 3000;
+  const ffSpeedMph = parseFloat(document.getElementById('ff-speed').value)   || 120;
+  const safetyPct  = (parseFloat(document.getElementById('safety-margin').value) || 0) / 100;
   const jrAirspeedKts = parseFloat(document.getElementById('jr-airspeed').value) || 80;
   const exitSepFt     = parseFloat(document.getElementById('exit-sep').value) || 1500;
-
-  // Jump run heading — plane flies INTO wind, so heading = opposite of wind velocity direction
-  let jrHdg = state.jumpRunHdgDeg;
-  if (jrHdg === null) {
-    const wExit = getWindAtAGL(altExit);
-    const exitWindSpd = vecLen(wExit);
-    if (exitWindSpd > 0.5) {
-      // Wind velocity direction = where wind goes. Plane flies into wind = opposite.
-      const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
-      jrHdg = (windVelDir + 180) % 360; // into wind
-    } else {
-      jrHdg = fHdg; // calm — use final heading as fallback
-    }
-    document.getElementById('jr-hdg-display').textContent = Math.round(jrHdg) + '°';
-    document.getElementById('jr-hdg-slider').value = Math.round(jrHdg);
-  }
 
   if (isNaN(glide)||isNaN(cSpd)||isNaN(altE)||isNaN(altB)||isNaN(altF)) return;
   if (altB>=altE||altF>=altB) { setStatus('Altitudes must be: Enter > Base > Final'); return; }
@@ -1308,91 +1485,104 @@ function calculate() {
     fHdg=s.dirDeg;
   }
 
-  // vertical speed (kts) = horiz speed / glide; convert to ft/min for leg time calcs
-  const dRate  = (cSpd/glide) * 101.269;  // ft/min
-  const tF     = altF/dRate;
-  const tB     = (altB-altF)/dRate;
-  const tD     = (altE-altB)/dRate;
+  // Jump run heading (needs fHdg as fallback for calm winds)
+  let jrHdg = state.jumpRunHdgDeg;
+  if (jrHdg === null) {
+    const wExit = getWindAtAGL(altExit);
+    const exitWindSpd = vecLen(wExit);
+    if (exitWindSpd > 0.5) {
+      const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
+      jrHdg = (windVelDir + 180) % 360;
+    } else {
+      jrHdg = fHdg;
+    }
+    document.getElementById('jr-hdg-display').value = Math.round(jrHdg);
+    document.getElementById('jr-hdg-slider').value = Math.round(jrHdg);
+  }
+
+  // Per-leg canopy performance
+  const perfF  = getLegPerf('f');
+  const perfB  = getLegPerf('b');
+  const perfDW = getLegPerf('dw');
+  const dRateF  = (perfF.cSpd  / perfF.glide)  * 101.269;
+  const dRateB  = (perfB.cSpd  / perfB.glide)  * 101.269;
+  const dRateDW = (perfDW.cSpd / perfDW.glide) * 101.269;
+  const tF = altF / dRateF;
+  const tB = (altB - altF) / dRateB;
+  const tD = (altE - altB) / dRateDW;
 
   // ── Final leg ──
-  const wF    = getWindAtAGL(altF/2);
-  const fVec  = hdgVec(fHdg);
-  const fStillFt = altF*glide;
-  // Final ground track displacement
-  const fDisp = {
-    dN: fVec.n*fStillFt + wF.n*(tF/60)*6076,
-    dE: fVec.e*fStillFt + wF.e*(tF/60)*6076
-  };
+  const wF       = getWindAtAGL(altF/2);
+  const fVec     = hdgVec(fHdg);
+  const fStillFt = altF * perfF.glide;
+  let fDisp, fHdgActual;
+  if (state.legModes.f === 'crab') {
+    const dfN = wF.n*(tF/60)*6076, dfE = wF.e*(tF/60)*6076;
+    const bfc = 2*(fVec.n*dfN + fVec.e*dfE);
+    const cfc = dfN**2+dfE**2 - fStillFt**2;
+    const dfc = bfc**2-4*cfc;
+    const kf  = dfc>=0 ? (-bfc+Math.sqrt(Math.max(0,dfc)))/2 : fStillFt;
+    const fRN = fVec.n*kf - dfN, fRE = fVec.e*kf - dfE;
+    fHdgActual = (Math.atan2(fRE,fRN)*R2D+360)%360;
+    fDisp = {dN: fRN+dfN, dE: fRE+dfE};
+  } else {
+    fHdgActual = fHdg;
+    fDisp = {dN: fVec.n*fStillFt + wF.n*(tF/60)*6076, dE: fVec.e*fStillFt + wF.e*(tF/60)*6076};
+  }
   const {lat:tLat,lng:tLng} = state.target;
   const tFinal = offsetLL(tLat, tLng, -fDisp.dN, -fDisp.dE);
-
-  // Final ground track unit vector
   const fTrackUnit = normalize({n:fDisp.dN, e:fDisp.dE});
 
   // ── Base leg ──
-  // Drifting: steer exactly 90° to final (bHdg), let wind drift you to turn point
-  // Traditional: solve for steered heading that produces a 90° ground track to final track
-  const bHdgNominal = state.hand==='left' ? (fHdg+90)%360 : (fHdg-90+360)%360;
-  const wB    = getWindAtAGL((altB+altF)/2);
-  const bStillFt = (altB-altF)*glide;
+  const wB       = getWindAtAGL((altB+altF)/2);
+  const bStillFt = (altB-altF) * perfB.glide;
   let bHdg, bDisp;
-
-  if (state.patternType === 'traditional') {
-    // Solve for steered heading such that ground track is perpendicular to final ground track
-    // Left hand: base ground track = fTrackUnit rotated 90° CCW
-    //   CCW rotation: (x,y) → (-y, x)  so (N,E) → (-E, N)
-    // Right hand: base ground track = fTrackUnit rotated 90° CW
-    //   CW rotation: (x,y) → (y, -x)  so (N,E) → (E, -N)
-    const bTargetN = state.hand==='left' ? -fTrackUnit.e :  fTrackUnit.e;
-    const bTargetE = state.hand==='left' ?  fTrackUnit.n : -fTrackUnit.n;
-    const driftBN = wB.n*(tB/60)*6076;
-    const driftBE = wB.e*(tB/60)*6076;
-    const bc = 2*(bTargetN*driftBN + bTargetE*driftBE);
-    const cc = driftBN**2 + driftBE**2 - bStillFt**2;
-    const bd = bc**2 - 4*cc;
-    const bk = bd>=0 ? (-bc + Math.sqrt(Math.max(0,bd)))/2 : bStillFt;
-    const bRhsN = bTargetN*bk - driftBN;
-    const bRhsE = bTargetE*bk - driftBE;
-    bHdg = (Math.atan2(bRhsE, bRhsN)*R2D + 360) % 360;
-    bDisp = { dN: bRhsN+driftBN, dE: bRhsE+driftBE };
+  if (state.legModes.b === 'crab') {
+    const bTN = state.hand==='left' ? -fTrackUnit.e :  fTrackUnit.e;
+    const bTE = state.hand==='left' ?  fTrackUnit.n : -fTrackUnit.n;
+    const dbN = wB.n*(tB/60)*6076, dbE = wB.e*(tB/60)*6076;
+    const bc = 2*(bTN*dbN + bTE*dbE);
+    const cc = dbN**2+dbE**2 - bStillFt**2;
+    const bd = bc**2-4*cc;
+    const bk = bd>=0 ? (-bc+Math.sqrt(Math.max(0,bd)))/2 : bStillFt;
+    const bRN = bTN*bk - dbN, bRE = bTE*bk - dbE;
+    bHdg = (Math.atan2(bRE,bRN)*R2D+360)%360;
+    bDisp = {dN: bRN+dbN, dE: bRE+dbE};
   } else {
-    // Drifting: steer nominal 90° heading, drift freely
-    bHdg = bHdgNominal;
-    bDisp = {
-      dN: hdgVec(bHdg).n*bStillFt + wB.n*(tB/60)*6076,
-      dE: hdgVec(bHdg).e*bStillFt + wB.e*(tB/60)*6076
-    };
+    bHdg = state.hand==='left' ? (fHdg+90)%360 : (fHdg-90+360)%360;
+    bDisp = {dN: hdgVec(bHdg).n*bStillFt + wB.n*(tB/60)*6076, dE: hdgVec(bHdg).e*bStillFt + wB.e*(tB/60)*6076};
   }
   const tBase = offsetLL(tFinal.lat, tFinal.lng, -bDisp.dN, -bDisp.dE);
 
-  // ── Downwind leg — solve for steered heading that gives ground track antiparallel to final ──
-  // We need: hdgVec(dwHdg)*dStillFt + wD*(tD/60)*6076 = -k * fTrackUnit  (k > 0)
-  // hdgVec(dwHdg)*dStillFt = -k*fTrackUnit - wD*(tD/60)*6076
-  // The RHS vector's direction gives dwHdg; its magnitude / dStillFt must equal 1 (unit vec)
-  // We solve for k by requiring |RHS| = dStillFt
+  // ── Downwind leg ──
   const wD       = getWindAtAGL((altE+altB)/2);
-  const dStillFt = (altE-altB)*glide;
-  const driftN   = wD.n*(tD/60)*6076;
-  const driftE   = wD.e*(tD/60)*6076;
-
-  // RHS = -k*fTrackUnit - drift
-  // |RHS|² = k²  (we want it = dStillFt²)
-  // (fTrackUnit.n*k + driftN)² + (fTrackUnit.e*k + driftE)² = dStillFt²
-  // k²(fn²+fe²) + 2k(fn*dN+fe*dE) + (dN²+dE²) = dStillFt²
-  // fn²+fe²=1, so: k² + 2k*(fn*dN+fe*dE) + drift² = dStillFt²
-  const b_coef = 2*(fTrackUnit.n*driftN + fTrackUnit.e*driftE);
-  const c_coef = driftN**2 + driftE**2 - dStillFt**2;
-  const disc   = b_coef**2 - 4*c_coef;
-  // Take positive root (k must be > 0)
-  const k      = disc>=0 ? (-b_coef + Math.sqrt(Math.max(0,disc)))/2 : dStillFt;
-  const dwRhsN = -(k*fTrackUnit.n) - driftN;
-  const dwRhsE = -(k*fTrackUnit.e) - driftE;
-  const dwHdg  = (Math.atan2(dwRhsE, dwRhsN)*R2D + 360) % 360;
-
-  const dDisp = {
-    dN: dwRhsN + driftN,  // = -k*fTrackUnit.n  (antiparallel to final track)
-    dE: dwRhsE + driftE
-  };
+  const dStillFt = (altE-altB) * perfDW.glide;
+  const driftN   = wD.n*(tD/60)*6076, driftE = wD.e*(tD/60)*6076;
+  let dwHdg, dDisp;
+  const isZPattern = state.legModes.dw === 'z';
+  if (state.legModes.dw === 'crab') {
+    // Crab antiparallel to final ground track
+    const b1 = 2*(fTrackUnit.n*driftN + fTrackUnit.e*driftE);
+    const c1 = driftN**2+driftE**2 - dStillFt**2;
+    const d1 = b1**2-4*c1;
+    const k1 = d1>=0 ? (-b1+Math.sqrt(Math.max(0,d1)))/2 : dStillFt;
+    dwHdg = (Math.atan2(-(k1*fTrackUnit.e)-driftE, -(k1*fTrackUnit.n)-driftN)*R2D+360)%360;
+    dDisp = {dN: -(k1*fTrackUnit.n), dE: -(k1*fTrackUnit.e)};
+  } else if (isZPattern) {
+    // Z: fly parallel to final (upwind direction = fTrackUnit)
+    const b2 = -2*(fTrackUnit.n*driftN + fTrackUnit.e*driftE);
+    const c2 = driftN**2+driftE**2 - dStillFt**2;
+    const d2 = b2**2-4*c2;
+    const k2 = d2>=0 ? (-b2+Math.sqrt(Math.max(0,d2)))/2 : dStillFt;
+    const zRN = k2*fTrackUnit.n - driftN, zRE = k2*fTrackUnit.e - driftE;
+    dwHdg = (Math.atan2(zRE,zRN)*R2D+360)%360;
+    dDisp = {dN: zRN+driftN, dE: zRE+driftE};
+  } else {
+    // Drift antiparallel
+    dwHdg = (fHdg+180)%360;
+    dDisp = {dN: hdgVec(dwHdg).n*dStillFt + driftN, dE: hdgVec(dwHdg).e*dStillFt + driftE};
+  }
+  // entry = tBase - dDisp (pilot flies dDisp to reach tBase)
   const entry = offsetLL(tBase.lat, tBase.lng, -dDisp.dN, -dDisp.dE);
 
   // ── Steered heading endpoint lines ──
@@ -1401,9 +1591,9 @@ function calculate() {
   function trackHdgDeg(disp) { return (Math.atan2(disp.dE,disp.dN)*R2D+360)%360; }
   function hdgDiff(a,b) { let d=Math.abs(a-b)%360; return d>180?360-d:d; }
 
-  const bSteered  = offsetLL(tBase.lat,  tBase.lng,  hdgVec(bHdg).n*bStillFt,  hdgVec(bHdg).e*bStillFt);
-  const fSteered  = offsetLL(tFinal.lat, tFinal.lng, hdgVec(fHdg).n*fStillFt,  hdgVec(fHdg).e*fStillFt);
-  const dwSteered = offsetLL(entry.lat,  entry.lng,  hdgVec(dwHdg).n*dStillFt, hdgVec(dwHdg).e*dStillFt);
+  const bSteered  = offsetLL(tBase.lat,  tBase.lng,  hdgVec(bHdg).n*bStillFt,      hdgVec(bHdg).e*bStillFt);
+  const fSteered  = offsetLL(tFinal.lat, tFinal.lng, hdgVec(fHdgActual).n*fStillFt, hdgVec(fHdgActual).e*fStillFt);
+  const dwSteered = offsetLL(entry.lat,  entry.lng,  hdgVec(dwHdg).n*dStillFt,      hdgVec(dwHdg).e*dStillFt);
 
   const bDrift  = hdgDiff(bHdg,  trackHdgDeg(bDisp));
   const fDrift  = hdgDiff(fHdg,  trackHdgDeg(fDisp));
@@ -1449,12 +1639,14 @@ function calculate() {
     entry, tBase, tFinal, landing:state.target,
     bSteered, fSteered, dwSteered,
     bDrift, fDrift, dwDrift, DRIFT_THRESH,
-    fHdg, bHdg, dwHdg,
+    fHdg, fHdgActual, bHdg, dwHdg,
     fDisp, bDisp, dDisp,
     fWC, bWC, dWC,
-    glide, cSpd, altE, altB, altF,
+    glide: perfF.glide, cSpd: perfF.cSpd,  // default for safety region calcs
+    altE, altB, altF,
     altExit, altOpen, ffSpeedMph, safetyPct,
     jrHdg, jrAirspeedKts, exitSepFt,
+    isZPattern,
     fieldElevFt: state.fieldElevFt,
   };
 
@@ -1960,9 +2152,34 @@ function loadSettings() {
     const hand = localStorage.getItem(storageKey('hand'));
     if (hand === 'left' || hand === 'right') setHand(hand);
 
-    // Pattern type
-    const pt = localStorage.getItem(storageKey('pattern_type'));
-    if (pt === 'drifting' || pt === 'traditional') setPatternType(pt);
+    // Leg modes
+    const legModesStr = localStorage.getItem(storageKey('leg_modes'));
+    if (legModesStr) {
+      const saved = JSON.parse(legModesStr);
+      ['dw','b','f'].forEach(leg => {
+        if (saved[leg]) setLegMode(leg, saved[leg]);
+      });
+    }
+
+    // Per-leg custom perf flags and values
+    const legCustomStr = localStorage.getItem(storageKey('leg_custom'));
+    if (legCustomStr) {
+      const saved = JSON.parse(legCustomStr);
+      ['dw','b','f'].forEach(leg => {
+        if (saved[leg]) {
+          const cb = document.getElementById(`${leg}-custom-perf`);
+          if (cb) cb.checked = true;
+          state.legCustomPerf[leg] = true;
+          const section = document.getElementById(`${leg}-perf`);
+          if (section) section.style.display = 'block';
+        }
+        ['glide','speed','sink'].forEach(field => {
+          const val = localStorage.getItem(storageKey(`${leg}_${field}`));
+          const el  = document.getElementById(`${leg}-${field}`);
+          if (val !== null && el) { el.value = val; el.style.color = 'var(--text)'; }
+        });
+      });
+    }
 
     // Layer visibility — directly set state and update buttons
     // Done last so setHand/setPatternType don't clobber pp_layers via saveSettings
