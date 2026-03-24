@@ -794,22 +794,51 @@ function initStorage() {
     }
   } catch(e) {}
 }
-const windCache = {}; // { key: {rawData, fieldElevFt, loc, ts} }
-function cacheKey(lat, lng) { return `${lat.toFixed(2)},${lng.toFixed(2)}`; } // no offset in key
+// ─── WIND & ELEVATION CACHE (localStorage-backed) ────────────────────────────
+// In-memory mirror of localStorage cache for fast access within a session.
+// Key = toFixed(2) lat/lng grid (~1.1km cells). No separate distance check needed —
+// two points sharing a key are by definition close enough to share wind data.
+const windCache = {};
+function cacheKey(lat, lng) { return `${lat.toFixed(2)},${lng.toFixed(2)}`; }
+
+// distMiles is still used by placeTarget to decide whether to reset manual headings
 function distMiles(a, b) {
   const dLat = (a.lat-b.lat) * 69;
   const dLng = (a.lng-b.lng) * 69 * Math.cos(a.lat * Math.PI/180);
   return Math.sqrt(dLat**2 + dLng**2);
 }
+
 function findCachedWinds(lat, lng) {
-  const now = Date.now();
-  for (const key of Object.keys(windCache)) {
-    const c = windCache[key];
-    if (now - c.ts > CACHE_MS) { delete windCache[key]; continue; }
-    if (distMiles({lat,lng}, c.loc) <= 1.0) return c;
-  }
-  return null;
+  const key = cacheKey(lat, lng);
+  const c = windCache[key];
+  if (!c) return null;
+  if (Date.now() - c.ts > CACHE_MS) { delete windCache[key]; return null; }
+  return c;
 }
+
+function saveWindCache(lat, lng, entry) {
+  const key = cacheKey(lat, lng);
+  windCache[key] = entry;
+  try {
+    localStorage.setItem(storageKey('wind_cache'), JSON.stringify(windCache));
+  } catch(e) { /* localStorage full or unavailable */ }
+}
+
+function loadWindCache() {
+  try {
+    const raw = localStorage.getItem(storageKey('wind_cache'));
+    if (!raw) return;
+    const stored = JSON.parse(raw);
+    const now = Date.now();
+    // Load non-expired entries into in-memory cache
+    Object.entries(stored).forEach(([key, entry]) => {
+      if (now - entry.ts <= CACHE_MS) windCache[key] = entry;
+    });
+  } catch(e) {}
+}
+
+// Elevation is stored inside wind cache entries (fieldElevFt per key).
+// No separate elevation cache needed — it rides with the wind entry.
 
 // Interpolated display rows (ft AGL) — these are always shown
 const INTERP_ALTS_FT  = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000];
@@ -941,6 +970,12 @@ async function placeTarget(lat, lng) {
 
 // ─── ELEVATION ────────────────────────────────────────────────────────────────
 async function fetchElevation(lat, lng) {
+  // Check if wind cache already has elevation for this location
+  const cached = findCachedWinds(lat, lng);
+  if (cached?.fieldElevFt != null) {
+    state.fieldElevFt = cached.fieldElevFt;
+    return;
+  }
   try {
     const d = await (await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`)).json();
     if (d.elevation?.[0] != null) state.fieldElevFt = Math.round(d.elevation[0] * 3.28084);
@@ -955,12 +990,14 @@ function geopotentialToFtMSL(gpm) { return Math.round(gpm * 3.28084); }
 async function fetchWinds(forceRefresh=false) {
   if (!state.target) return;
 
-  // Check cache — cache stores raw API payload, not processed winds
+  // Check cache — key-only lookup, no distance check needed
   if (!forceRefresh) {
     const cached = findCachedWinds(state.target.lat, state.target.lng);
     if (cached) {
+      if (cached.fieldElevFt != null) state.fieldElevFt = cached.fieldElevFt;
       processWindData(cached.rawData, cached.fieldElevFt);
       updateWindStatusAge(cached.ts);
+      setStatus(`Winds from cache · SFC ${state.surfaceWind.dirDeg}°@${state.surfaceWind.speedKts}kt`);
       return;
     }
   }
@@ -980,7 +1017,7 @@ async function fetchWinds(forceRefresh=false) {
 
     const fieldElevFt = state.fieldElevFt || 0;
     const ts = Date.now();
-    windCache[cacheKey(lat,lng)] = {rawData, fieldElevFt, loc:{lat,lng}, ts};
+    saveWindCache(lat, lng, {rawData, fieldElevFt, ts});
     state.fieldElevFt = fieldElevFt;
 
     processWindData(rawData, fieldElevFt);
@@ -2145,14 +2182,32 @@ function setHand(h) {
 }
 
 // ─── DZ SEARCH ────────────────────────────────────────────────────────────────
+const DZ_CACHE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 let dzList=[], dzIdx=-1;
 (async()=>{
+  // Try localStorage first
+  try {
+    const raw = localStorage.getItem(storageKey('dz_list'));
+    if (raw) {
+      const stored = JSON.parse(raw);
+      if (Date.now() - stored.ts < DZ_CACHE_MS && Array.isArray(stored.list) && stored.list.length > 0) {
+        dzList = stored.list;
+        return; // skip network fetch
+      }
+    }
+  } catch(e) {}
+  // Fetch from network
   try {
     const d=await(await fetch('https://raw.githubusercontent.com/OTGApps/USPADropzones/master/dropzones.geojson')).json();
     dzList=d.features.filter(f=>f.geometry?.coordinates).map(f=>({
       name:f.properties.name||'', city:f.properties.city||'', state:f.properties.state||'',
       lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0]
     })).filter(d=>d.name&&d.lat&&d.lng);
+    // Persist to localStorage
+    try {
+      localStorage.setItem(storageKey('dz_list'), JSON.stringify({list: dzList, ts: Date.now()}));
+    } catch(e) {}
   } catch(e){ console.warn('DZ data failed',e); }
 })();
 
@@ -2296,6 +2351,7 @@ function loadSettings() {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 initStorage();   // version-check and wipe stale data first
+loadWindCache(); // restore wind cache from localStorage into memory
 checkWaiver();
 loadSettings();
 updateCanopyCalc();
