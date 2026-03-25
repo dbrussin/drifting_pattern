@@ -44,8 +44,9 @@
     display: none;
   }
   #search-bar.open { display: block; }
+  #search-input-row { display: flex; gap: 6px; align-items: center; }
   #dz-search {
-    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    flex: 1; min-width: 0; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
     color: var(--text); font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 600;
     padding: 8px 12px; letter-spacing: 0.04em;
   }
@@ -58,6 +59,12 @@
   }
   #dz-dropdown.open { display: block; }
   #dz-dropdown { display: none; }
+  #locate-btn {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--muted); width: 36px; height: 36px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; flex-shrink: 0; padding: 0;
+  }
+  #locate-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ── HEADING BAR — persistent bottom bar ── */
   #heading-bar {
@@ -279,7 +286,15 @@
 
 <!-- FLOATING SEARCH BAR -->
 <div id="search-bar">
-  <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
+  <div id="search-input-row">
+    <input id="dz-search" type="text" placeholder="Search drop zone…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button id="locate-btn" onclick="goToMyLocation()" title="Go to my location">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+      </svg>
+    </button>
+  </div>
   <div id="dz-dropdown"></div>
 </div>
 
@@ -1474,6 +1489,13 @@ function collapseSearch() {
   document.getElementById('search-bar').classList.remove('open');
   document.getElementById('dz-dropdown').classList.remove('open');
   document.getElementById('dz-dropdown').innerHTML = '';
+}
+function goToMyLocation() {
+  if (!navigator.geolocation) { setStatus('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { map.setView([p.coords.latitude, p.coords.longitude], 14); collapseSearch(); },
+    () => setStatus('Unable to get location')
+  );
 }
 function expandSearch() {
   const el = document.getElementById('dz-search');
