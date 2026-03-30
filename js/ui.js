@@ -664,6 +664,9 @@ function renderLegs() {
       if (s.color) el.style.color = s.color;
     }
   });
+
+  // Pyramid position depends on clientWidth — defer until after layout
+  requestAnimationFrame(updateSettingsWindPyramid);
 }
 
 // ── Leg altitude slider sync ──────────────────────────────────────────────────
