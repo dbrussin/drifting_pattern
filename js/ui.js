@@ -92,6 +92,10 @@ function updateHeadingDisplay(deg) {
   const d = Math.round(((deg % 360) + 360) % 360);
   document.getElementById('heading-bar-val').value    = d;
   document.getElementById('heading-bar-slider').value = d;
+  const settingsSl  = document.getElementById('settings-hdg-final-sl');
+  const settingsInp = document.getElementById('settings-hdg-final');
+  if (settingsSl)  settingsSl.value  = d;
+  if (settingsInp) settingsInp.value = d;
   updateWindPyramid(); updateJrPyramid();
 }
 
@@ -104,6 +108,10 @@ function onHeadingInput(v) {
   state.manualHeading   = true;
   state.finalHeadingDeg = d;
   document.getElementById('heading-bar-slider').value = d;
+  const settingsSl  = document.getElementById('settings-hdg-final-sl');
+  const settingsInp = document.getElementById('settings-hdg-final');
+  if (settingsSl)  settingsSl.value  = d;
+  if (settingsInp) settingsInp.value = d;
   updateWindPyramid();
   clearTimeout(_headingInputTimer);
   _headingInputTimer = setTimeout(calculate, 150);
@@ -130,6 +138,45 @@ function updateWindPyramid() {
   pyrHit.style.left    = pct + '%';
   pyr.style.display    = 'block';
   pyrHit.style.display = 'block';
+
+  updateSettingsWindPyramid();
+}
+
+function updateSettingsWindPyramid() {
+  const windHdg = state.surfaceWind?.dirDeg ?? null;
+  const pyr     = document.getElementById('settings-wind-pyramid');
+  const pyrHit  = document.getElementById('settings-wind-pyramid-hit');
+  if (!pyr || !pyrHit) return;
+  if (windHdg === null) { pyr.style.display = 'none'; pyrHit.style.display = 'none'; return; }
+  const slider = document.getElementById('settings-hdg-final-sl');
+  if (!slider) { pyr.style.display = 'none'; pyrHit.style.display = 'none'; return; }
+  const trackW = slider.clientWidth;
+  const thumbR = 14;
+  const pct    = ((thumbR + (windHdg / 359) * (trackW - 2 * thumbR)) / trackW) * 100;
+  pyr.style.left       = pct + '%';
+  pyrHit.style.left    = pct + '%';
+  pyr.style.display    = 'block';
+  pyrHit.style.display = 'block';
+}
+
+function onSettingsFinalHdg(src) {
+  const sl  = document.getElementById('settings-hdg-final-sl');
+  const inp = document.getElementById('settings-hdg-final');
+  if (!sl || !inp) return;
+  if (src === 'slider') {
+    inp.value = sl.value;
+  } else {
+    const d = ((parseInt(inp.value) || 0) + 360) % 360;
+    inp.value = d;
+    sl.value  = d;
+  }
+  const deg = parseInt(sl.value);
+  state.manualHeading   = true;
+  state.finalHeadingDeg = deg;
+  document.getElementById('heading-bar-val').value    = deg;
+  document.getElementById('heading-bar-slider').value = deg;
+  updateWindPyramid();
+  calculate();
 }
 
 // ── Leg modes (crab / drift / Z) ─────────────────────────────────────────────
@@ -499,6 +546,10 @@ function renderLegs() {
 
   // ── Standard legs (Downwind, Base, Final) ──
   // Z-pattern option only shown on downwind, and only when no extra legs exist
+  const initialFinalHdg = Math.round(
+    state.finalHeadingDeg ??
+    parseFloat(document.getElementById('heading-bar-val')?.value) ?? 0
+  );
   LEG_DEFS.forEach(def => {
     const { key, label, color, altId, altLabel, altDefault, altMin, altMax, altStep } = def;
     const mode        = state.legModes[key];
@@ -523,6 +574,32 @@ function renderLegs() {
         <input type="checkbox" id="dw-z-check" ${zChecked} ${zDisabled ? 'disabled' : ''} onchange="toggleZPattern(this.checked)">
       </div>` : '';
 
+    const finalHdgRow = key === 'f' ? `
+      <div style="margin-bottom:6px;">
+        <label style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">Final Hdg</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="flex:1;position:relative;padding-bottom:10px;min-width:0;">
+            <input type="range" id="settings-hdg-final-sl" min="0" max="359" step="1"
+              value="${initialFinalHdg}" style="width:100%;accent-color:var(--accent);display:block;"
+              oninput="onSettingsFinalHdg('slider')">
+            <div id="settings-wind-pyramid" style="position:absolute;bottom:0;width:0;height:0;
+              border-left:7px solid transparent;border-right:7px solid transparent;
+              border-bottom:12px solid var(--accent);transform:translateX(-50%);
+              pointer-events:none;display:none;
+              filter:drop-shadow(0 0 3px rgba(232,244,77,0.5));"></div>
+            <div id="settings-wind-pyramid-hit" style="position:absolute;bottom:0;width:28px;height:14px;
+              transform:translateX(-50%);cursor:pointer;display:none;"
+              onclick="snapToWind()" title="Snap to into-wind heading"></div>
+          </div>
+          <input type="number" id="settings-hdg-final" min="0" max="359" step="1"
+            value="${initialFinalHdg}"
+            style="font-family:'Space Mono',monospace;font-size:14px;color:var(--accent);
+            background:transparent;border:none;border-bottom:1px solid var(--border);
+            width:46px;text-align:center;padding:2px 0;flex-shrink:0;"
+            oninput="onSettingsFinalHdg('input')">
+        </div>
+      </div>` : '';
+
     const card = document.createElement('div');
     card.style.cssText = 'background:var(--panel2);border-radius:6px;padding:8px 10px;border:1px solid var(--border);';
     card.innerHTML = `
@@ -541,6 +618,7 @@ function renderLegs() {
           <input type="number" id="${altId}" value="${altDefault}" min="${altMin}" max="${altMax}" step="${altStep}" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text);background:transparent;border:none;border-bottom:1px solid var(--border);width:56px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onLegAlt('${altId}','input')">
         </div>
       </div>
+      ${finalHdgRow}
       <details id="leg-details-${key}" class="leg-details" ${detOpen}>
         <summary class="leg-details-summary"><span class="leg-details-arrow">▸</span>More options</summary>
         <div class="leg-details-body">
