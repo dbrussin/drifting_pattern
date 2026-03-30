@@ -681,6 +681,9 @@ function getLegAltConstraints(numId) {
   const altEnter = parseFloat(document.getElementById('alt-enter')?.value) || 900;
   const altBase  = parseFloat(document.getElementById('alt-base')?.value)  || 600;
   const altFinal = parseFloat(document.getElementById('alt-final')?.value) || 300;
+  const altOpen  = parseFloat(document.getElementById('alt-open')?.value)  || 3000;
+  // Ceiling for the highest canopy leg: must stay below opening altitude
+  const topMax   = altOpen - MIN_GAP;
 
   // Extra legs in display order: highest defaultAlt first (same sort as renderLegs)
   const displayOrder = [...(state.extraLegs || [])].sort((a, b) => b.defaultAlt - a.defaultAlt);
@@ -689,18 +692,18 @@ function getLegAltConstraints(numId) {
   if (numId === 'alt-final') return { min: 100, max: Math.max(100, altBase - MIN_GAP) };
   if (numId === 'alt-base')  return { min: altFinal + MIN_GAP, max: Math.max(altFinal + MIN_GAP, altEnter - MIN_GAP) };
   if (numId === 'alt-enter') {
-    // Lowest displayed extra leg (last in displayOrder) sets our ceiling
+    // Lowest displayed extra leg (last in displayOrder) sets our ceiling; otherwise opening alt does
     const lowestXL = displayOrder.length > 0 ? getAlt(displayOrder[displayOrder.length - 1]) : Infinity;
-    const maxVal   = isFinite(lowestXL) ? lowestXL - MIN_GAP : 5000;
+    const maxVal   = isFinite(lowestXL) ? lowestXL - MIN_GAP : topMax;
     return { min: altBase + MIN_GAP, max: Math.max(altBase + MIN_GAP, maxVal) };
   }
   if (numId.startsWith('alt-xl')) {
     const xlId = numId.replace('alt-', '');
     const idx  = displayOrder.findIndex(xl => xl.id === xlId);
     if (idx === -1) return null;
-    // displayOrder[0] = highest. idx-1 = leg above (higher alt), idx+1 = leg below (lower alt)
-    const maxVal = idx === 0                     ? 5000           : getAlt(displayOrder[idx - 1]) - MIN_GAP;
-    const minVal = idx === displayOrder.length-1 ? altEnter + MIN_GAP : getAlt(displayOrder[idx + 1]) + MIN_GAP;
+    // displayOrder[0] = highest leg. idx-1 = leg above (higher alt), idx+1 = leg below (lower alt)
+    const maxVal = idx === 0                      ? topMax                              : getAlt(displayOrder[idx - 1]) - MIN_GAP;
+    const minVal = idx === displayOrder.length - 1 ? altEnter + MIN_GAP : getAlt(displayOrder[idx + 1]) + MIN_GAP;
     return { min: minVal, max: Math.max(minVal, maxVal) };
   }
   return null;
@@ -763,6 +766,7 @@ function onOpenAltChange() {
   if (!isNaN(exit) && !isNaN(open) && open >= exit) {
     openEl.value = exit - 500;
   }
+  updateAllSliderRanges();
   calculate();
 }
 
