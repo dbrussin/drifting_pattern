@@ -139,8 +139,8 @@
 
     <div class="section-label">Jump Run</div>
     <div class="input-grid">
-      <div class="input-group"><label for="alt-exit">Exit Alt (ft AGL)</label><input type="number" id="alt-exit" value="13500" min="1000" max="25000" step="500" oninput="calculate()"></div>
-      <div class="input-group"><label for="alt-open">Opening Alt (ft AGL)</label><input type="number" id="alt-open" value="3000" min="500" max="8000" step="100" oninput="calculate()"></div>
+      <div class="input-group"><label for="alt-exit">Exit Alt (ft AGL)</label><input type="number" id="alt-exit" value="13500" min="1000" max="25000" step="500" oninput="onExitAltChange()"></div>
+      <div class="input-group"><label for="alt-open">Opening Alt (ft AGL)</label><input type="number" id="alt-open" value="3000" min="500" max="8000" step="100" oninput="onOpenAltChange()"></div>
       <div class="input-group"><label for="ff-speed">Freefall Speed (mph)</label><input type="number" id="ff-speed" value="120" min="60" max="250" step="5" oninput="calculate()"></div>
       <div class="input-group"><label for="jr-airspeed">Aircraft IAS (kts)</label><input type="number" id="jr-airspeed" value="80" min="40" max="200" step="5" oninput="calculate()"></div>
       <div class="input-group"><label for="safety-margin">Region Buffer (%)</label><input type="number" id="safety-margin" value="10" min="0" max="40" step="1" oninput="calculate()"></div>

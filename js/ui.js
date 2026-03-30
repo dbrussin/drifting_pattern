@@ -671,14 +671,81 @@ function renderLegs() {
 
 // ── Leg altitude slider sync ──────────────────────────────────────────────────
 
+// Returns the valid [min, max] altitude range for a given leg input, enforcing
+// 100 ft minimum gaps between all legs in altitude order.
+function getLegAltConstraints(numId) {
+  const MIN_GAP  = 100;
+  const altEnter = parseFloat(document.getElementById('alt-enter')?.value) || 900;
+  const altBase  = parseFloat(document.getElementById('alt-base')?.value)  || 600;
+  const altFinal = parseFloat(document.getElementById('alt-final')?.value) || 300;
+
+  if (numId === 'alt-final') return { min: 100, max: Math.max(100, altBase - MIN_GAP) };
+  if (numId === 'alt-base')  return { min: altFinal + MIN_GAP, max: Math.max(altFinal + MIN_GAP, altEnter - MIN_GAP) };
+  if (numId === 'alt-enter') {
+    const extras = (state.extraLegs || [])
+      .map(xl => parseFloat(document.getElementById(`alt-${xl.id}`)?.value) || xl.defaultAlt)
+      .sort((a, b) => a - b);
+    const maxVal = extras.length > 0 ? extras[0] - MIN_GAP : 5000;
+    return { min: altBase + MIN_GAP, max: Math.max(altBase + MIN_GAP, maxVal) };
+  }
+  if (numId.startsWith('alt-xl')) {
+    const xlId  = numId.replace('alt-', '');
+    // Sort ALL extra legs by altitude (using current DOM values including the one being changed)
+    const extras = (state.extraLegs || [])
+      .map(xl => ({ id: xl.id, alt: parseFloat(document.getElementById(`alt-${xl.id}`)?.value) || xl.defaultAlt }))
+      .sort((a, b) => a.alt - b.alt);
+    const idx = extras.findIndex(xl => xl.id === xlId);
+    if (idx === -1) return null;
+    const minVal = idx === 0 ? altEnter + MIN_GAP : extras[idx - 1].alt + MIN_GAP;
+    const maxVal = idx === extras.length - 1 ? 5000 : extras[idx + 1].alt - MIN_GAP;
+    return { min: minVal, max: Math.max(minVal, maxVal) };
+  }
+  return null;
+}
+
 function onLegAlt(numId, src) {
   const sl  = document.getElementById(numId + '-sl');
   const num = document.getElementById(numId);
   if (!sl || !num) return;
   if (src === 'slider') { num.value = sl.value; num.style.color = 'var(--text)'; }
   else                  { sl.value  = num.value; }
+
+  // Enforce min/max constraints between adjacent legs
+  const c = getLegAltConstraints(numId);
+  if (c) {
+    const clamped = Math.max(c.min, Math.min(c.max, parseFloat(num.value)));
+    if (!isNaN(clamped) && clamped !== parseFloat(num.value)) {
+      num.value = clamped;
+      sl.value  = clamped;
+    }
+  }
+
   saveSettings();
   if (state.target) calculate();
+}
+
+// ── Jump run alt cross-field enforcement ──────────────────────────────────────
+
+function onExitAltChange() {
+  const exitEl = document.getElementById('alt-exit');
+  const openEl = document.getElementById('alt-open');
+  const exit   = parseFloat(exitEl.value);
+  const open   = parseFloat(openEl.value);
+  if (!isNaN(exit) && !isNaN(open) && exit <= open) {
+    exitEl.value = open + 500;
+  }
+  calculate();
+}
+
+function onOpenAltChange() {
+  const exitEl = document.getElementById('alt-exit');
+  const openEl = document.getElementById('alt-open');
+  const exit   = parseFloat(exitEl.value);
+  const open   = parseFloat(openEl.value);
+  if (!isNaN(exit) && !isNaN(open) && open >= exit) {
+    openEl.value = exit - 500;
+  }
+  calculate();
 }
 
 // ── Extra leg heading sync ────────────────────────────────────────────────────
