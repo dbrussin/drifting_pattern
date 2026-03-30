@@ -546,6 +546,8 @@ function renderLegs() {
 
   // ── Standard legs (Downwind, Base, Final) ──
   // Z-pattern option only shown on downwind, and only when no extra legs exist
+  // Final leg uses the dedicated Final Hdg slider — clear any legacy override
+  if (state.legHdgOverride?.f != null) { state.legHdgOverride.f = null; }
   const initialFinalHdg = Math.round(
     state.finalHeadingDeg ??
     parseFloat(document.getElementById('heading-bar-val')?.value) ?? 0
@@ -622,7 +624,7 @@ function renderLegs() {
       <details id="leg-details-${key}" class="leg-details" ${detOpen}>
         <summary class="leg-details-summary"><span class="leg-details-arrow">▸</span>More options</summary>
         <div class="leg-details-body">
-          <div id="${key}-hdg-override-wrap" style="margin-bottom:4px;">
+          ${key !== 'f' ? `<div id="${key}-hdg-override-wrap" style="margin-bottom:4px;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <label style="font-size:12px;color:var(--muted);flex:1;">Override approach hdg</label>
               <input type="checkbox" id="${key}-hdg-check" ${hdgOverrideChecked} onchange="onLegHdgOverrideToggle('${key}',this.checked)">
@@ -631,7 +633,7 @@ function renderLegs() {
               <input type="range" id="${key}-hdg-sl" min="0" max="359" step="1" value="${hdgVal}" style="flex:1;min-width:0;accent-color:var(--accent2);" oninput="onStdLegHdg('${key}','slider')">
               <input type="number" id="${key}-hdg" value="${hdgVal}" min="0" max="359" step="1" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--accent2);background:transparent;border:none;border-bottom:1px solid var(--border);width:46px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onStdLegHdg('${key}','input')">
             </div>
-          </div>
+          </div>` : ''}
           ${zRow}
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
             <label style="font-size:12px;color:var(--muted);flex:1;">Custom performance</label>
