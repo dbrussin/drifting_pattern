@@ -22,8 +22,8 @@
     </div>
     <div id="wind-loaded-age"></div>
   </div>
-  <div onclick="toggleSearch()" id="dz-search-icon" title="Search drop zones">🔍</div>
-  <div onclick="toggleOverlay('help')" title="Help" class="header-help-btn">?</div>
+  <div onclick="toggleSearch()" id="dz-search-icon" title="Search drop zones" role="button" tabindex="0" aria-label="Search drop zones">🔍</div>
+  <div onclick="toggleOverlay('help')" title="Help" class="header-help-btn" role="button" tabindex="0" aria-label="Help">?</div>
 </div>
 
 <!-- FLOATING SEARCH BAR -->
@@ -48,17 +48,17 @@
 
 <!-- MAP LEGEND -->
 <div id="map-legend">
-  <div class="legend-row"><div class="leg-swatch" style="background:var(--downwind-color)"></div>Downwind</div>
-  <div class="legend-row"><div class="leg-swatch" style="background:var(--base-color)"></div>Base</div>
-  <div class="legend-row"><div class="leg-swatch" style="background:var(--final-color)"></div>Final</div>
+  <div class="legend-row"><div class="leg-swatch leg-swatch-downwind"></div>Downwind</div>
+  <div class="legend-row"><div class="leg-swatch leg-swatch-base"></div>Base</div>
+  <div class="legend-row"><div class="leg-swatch leg-swatch-final"></div>Final</div>
   <div class="legend-row"><div class="leg-swatch dashed"></div>Steered heading</div>
 </div>
 
 <!-- ICON BAR -->
 <div id="icon-bar">
-  <div class="map-icon-btn" id="btn-labels"   onclick="toggleOverlay('labels')"   title="Display options">👁</div>
-  <div class="map-icon-btn" id="btn-settings" onclick="toggleOverlay('settings')" title="Settings">🪂</div>
-  <div class="map-icon-btn" id="btn-winds"    onclick="toggleOverlay('winds')"    title="Winds aloft">💨</div>
+  <div class="map-icon-btn" id="btn-labels"   onclick="toggleOverlay('labels')"   title="Display options" role="button" tabindex="0" aria-label="Display options">👁</div>
+  <div class="map-icon-btn" id="btn-settings" onclick="toggleOverlay('settings')" title="Settings"        role="button" tabindex="0" aria-label="Settings">🪂</div>
+  <div class="map-icon-btn" id="btn-winds"    onclick="toggleOverlay('winds')"    title="Winds aloft"     role="button" tabindex="0" aria-label="Winds aloft">💨</div>
 </div>
 
 <!-- HEADING BAR — persistent bottom -->
@@ -79,8 +79,8 @@
 
 <!-- ZOOM CONTROLS -->
 <div id="zoom-bar">
-  <div class="zoom-btn" onclick="map.zoomIn()"  title="Zoom in">+</div>
-  <div class="zoom-btn" onclick="map.zoomOut()" title="Zoom out">−</div>
+  <div class="zoom-btn" onclick="map.zoomIn()"  title="Zoom in"  role="button" tabindex="0" aria-label="Zoom in">+</div>
+  <div class="zoom-btn" onclick="map.zoomOut()" title="Zoom out" role="button" tabindex="0" aria-label="Zoom out">−</div>
 </div>
 
 <!-- SETTINGS OVERLAY -->
@@ -128,10 +128,10 @@
       <div class="input-group">
         <label>Jump Run Offset (nm)
           <span onclick="resetJrOffset()" title="Reset to calculated"
-            style="cursor:pointer;color:var(--accent2);font-size:9px;margin-left:4px;">↺</span>
+            class="jr-offset-reset" role="button" tabindex="0" aria-label="Reset jump run offset">↺</span>
         </label>
         <input type="number" id="jr-offset" value="" min="-10" max="10" step="0.1"
-          placeholder="calc" style="color:var(--muted);" oninput="onJrOffsetInput()">
+          placeholder="calc" oninput="onJrOffsetInput()">
       </div>
     </div>
     <div class="field-note">Freefall assumes vertical descent — horizontal drift from wind only.</div>
@@ -166,45 +166,45 @@
     <button class="overlay-close" onclick="closeOverlay('labels')">✕</button>
   </div>
   <div class="overlay-body">
-    <div class="field-note" style="margin-bottom:10px;">Toggle map layers on and off.</div>
+    <div class="field-note field-note-mb">Toggle map layers on and off.</div>
     <div class="layers-list">
 
       <div class="layer-section-header">Airspace</div>
       <div class="layer-row">
         <span class="layer-label">Jump Run</span>
-        <div id="layer-jumpRun" class="layer-toggle active" onclick="toggleLayer('jumpRun')">On</div>
+        <div id="layer-jumpRun" class="layer-toggle active" onclick="toggleLayer('jumpRun')" role="button" tabindex="0" aria-label="Toggle jump run layer">On</div>
       </div>
       <div class="layer-row">
         <span class="layer-label">Exit Region</span>
-        <div id="layer-exitRegion" class="layer-toggle active" onclick="toggleLayer('exitRegion')">On</div>
+        <div id="layer-exitRegion" class="layer-toggle active" onclick="toggleLayer('exitRegion')" role="button" tabindex="0" aria-label="Toggle exit region layer">On</div>
       </div>
       <div class="layer-row">
         <span class="layer-label">Canopy Regions</span>
-        <div id="layer-canopyRegions" class="layer-toggle active" onclick="toggleLayer('canopyRegions')">On</div>
+        <div id="layer-canopyRegions" class="layer-toggle active" onclick="toggleLayer('canopyRegions')" role="button" tabindex="0" aria-label="Toggle canopy regions layer">On</div>
       </div>
 
       <div class="layer-section-header">Pattern Labels</div>
       <div class="layer-row">
         <span class="layer-label">Turn Altitudes</span>
-        <div id="layer-turnAltLabels" class="layer-toggle active" onclick="toggleLayer('turnAltLabels')">On</div>
+        <div id="layer-turnAltLabels" class="layer-toggle active" onclick="toggleLayer('turnAltLabels')" role="button" tabindex="0" aria-label="Toggle turn altitude labels layer">On</div>
       </div>
       <div class="layer-row">
         <span class="layer-label">Leg Distances &amp; Wind</span>
-        <div id="layer-legDistances" class="layer-toggle active" onclick="toggleLayer('legDistances')">On</div>
+        <div id="layer-legDistances" class="layer-toggle active" onclick="toggleLayer('legDistances')" role="button" tabindex="0" aria-label="Toggle leg distances layer">On</div>
       </div>
       <div class="layer-row">
         <span class="layer-label">Headings &amp; Steer</span>
-        <div id="layer-legHeadings" class="layer-toggle active" onclick="toggleLayer('legHeadings')">On</div>
+        <div id="layer-legHeadings" class="layer-toggle active" onclick="toggleLayer('legHeadings')" role="button" tabindex="0" aria-label="Toggle leg headings layer">On</div>
       </div>
       <div class="layer-row">
         <span class="layer-label">Leg Arrows</span>
-        <div id="layer-legArrows" class="layer-toggle active" onclick="toggleLayer('legArrows')">On</div>
+        <div id="layer-legArrows" class="layer-toggle active" onclick="toggleLayer('legArrows')" role="button" tabindex="0" aria-label="Toggle leg arrows layer">On</div>
       </div>
 
       <div class="layer-section-header">Other</div>
       <div class="layer-row">
         <span class="layer-label">Map Legend</span>
-        <div id="layer-legend" class="layer-toggle active" onclick="toggleLayer('legend')">On</div>
+        <div id="layer-legend" class="layer-toggle active" onclick="toggleLayer('legend')" role="button" tabindex="0" aria-label="Toggle map legend layer">On</div>
       </div>
     </div>
   </div>
@@ -221,12 +221,12 @@
     <div class="help-section">
       <div class="help-heading">Getting Started</div>
       <p>Tap or click anywhere on the map to set a landing target. The app fetches winds aloft for that location and draws a suggested landing pattern. Tap or click again to move the target.</p>
-      <p class="help-para">Tap or click 🔍 to open search. Type a drop zone name to find it in the USPA database, or type any city, address, or landmark to navigate the map there — then tap or click the map to place your landing target. Tap the crosshair button (<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>) in the search bar to jump the map to your current GPS location and close the search bar.</p>
+      <p class="help-para">Tap or click 🔍 to open search. Type a drop zone name to find it in the USPA database, or type any city, address, or landmark to navigate the map there — then tap or click the map to place your landing target. Tap the crosshair button (<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="help-inline-icon"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>) in the search bar to jump the map to your current GPS location and close the search bar.</p>
     </div>
 
     <div class="help-section">
       <div class="help-heading">Final Heading</div>
-      <p>The heading bar at the bottom controls the final approach direction. By default it snaps to the surface wind direction. Drag the slider or tap/click the number field to type a heading directly. The <span style="color:var(--accent)">▲</span> marks the into-wind heading — tap or click it to snap back. Toggle L/R hand pattern with the L/R buttons.</p>
+      <p>The heading bar at the bottom controls the final approach direction. By default it snaps to the surface wind direction. Drag the slider or tap/click the number field to type a heading directly. The <span class="help-accent-text">▲</span> marks the into-wind heading — tap or click it to snap back. Toggle L/R hand pattern with the L/R buttons.</p>
     </div>
 
     <div class="help-section">
@@ -273,7 +273,7 @@
 
     <div class="help-section">
       <div class="help-heading">Jump Run</div>
-      <p>A suggested jump run is drawn through the exit region center, into the wind at exit altitude. The <span style="color:var(--accent2)">▲</span> marks the into-wind heading — tap or click it to snap. The heading field is also directly editable.</p>
+      <p>A suggested jump run is drawn through the exit region center, into the wind at exit altitude. The <span class="help-accent2-text">▲</span> marks the into-wind heading — tap or click it to snap. The heading field is also directly editable.</p>
       <p class="help-para"><b>Exit Alt / Opening Alt:</b> exit altitude must be above opening altitude — the app shows an error if they conflict. These altitudes drive the freefall drift integration and the exit/opening safety rings.</p>
       <p class="help-para"><b>Freefall Speed:</b> vertical descent speed during freefall (mph). Horizontal drift from wind is integrated across altitude bands from exit to opening altitude.</p>
       <p class="help-para"><b>Aircraft IAS:</b> indicated airspeed of the jump aircraft (kts), used to compute jump run ground speed and exit separation timing.</p>
@@ -302,7 +302,7 @@
 
     <div class="help-section">
       <div class="help-heading">Terms &amp; Disclaimer</div>
-      <p style="color:var(--accent);font-weight:700;margin-bottom:6px;">DEVELOPMENT VERSION — NOT FOR OPERATIONAL USE</p>
+      <p class="help-warning">DEVELOPMENT VERSION — NOT FOR OPERATIONAL USE</p>
       <p>This application is experimental software provided for informational and educational purposes only. It must not be used to plan, execute, or inform any actual skydive, parachute operation, aircraft jump run, or any other aviation or parachuting activity.</p>
       <p class="help-para-lg"><b>Assumption of Risk.</b> Skydiving, parachuting, and all related activities involve extreme risk of serious injury or death. You are solely responsible for all decisions made before, during, and after any jump.</p>
       <p class="help-para-lg"><b>No Warranty.</b> All outputs — wind data, pattern geometry, safety regions, jump run suggestions — are provided "as is" and may be inaccurate, incomplete, or wrong. Do not rely on them.</p>
@@ -317,11 +317,11 @@
 </div>
 
 <!-- WAIVER MODAL -->
-<div id="waiver-modal" class="waiver-modal">
+<div id="waiver-modal" class="waiver-modal" role="dialog" aria-modal="true" aria-labelledby="waiver-title">
   <div class="waiver-card">
     <div class="waiver-header">
       <div class="waiver-brand">Pattern Planner</div>
-      <div class="waiver-title">Terms of Use &amp; Disclaimer</div>
+      <div class="waiver-title" id="waiver-title">Terms of Use &amp; Disclaimer</div>
     </div>
     <div class="waiver-body">
 
@@ -387,7 +387,7 @@
     <div class="wind-header"><span>Alt AGL</span><span>Dir °T</span><span>Spd kts</span><span>°C</span></div>
     <div id="wind-rows"></div>
     <div class="winds-source-note">
-      Source: <a href="https://open-meteo.com" target="_blank" style="color:var(--accent2);text-decoration:none;">open-meteo.com</a> GFS.<br>
+      Source: <a href="https://open-meteo.com" target="_blank">open-meteo.com</a> GFS.<br>
       Teal rows: real model data · Grey rows: interpolated.<br>
       Values are editable — tap any cell to adjust.
     </div>

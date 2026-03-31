@@ -4,7 +4,7 @@
 
 const DZ_CACHE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-let dzList = null, dzIdx = -1; // dzList=null means still loading
+let dzList = null, dzIdx = -1, dzListFailed = false; // dzList=null means still loading
 
 // ── Load DZ list (from cache or network) ──────────────────────────────────────
 
@@ -34,7 +34,7 @@ let dzList = null, dzIdx = -1; // dzList=null means still loading
     try {
       localStorage.setItem(storageKey('dz_list'), JSON.stringify({list: dzList, ts: Date.now()}));
     } catch(e) {}
-  } catch(e) { dzList = []; console.warn('DZ data failed', e); }
+  } catch(e) { dzList = []; dzListFailed = true; console.warn('DZ data failed', e); }
 })();
 
 // ── Search bar show/hide ──────────────────────────────────────────────────────
@@ -73,15 +73,21 @@ function goToMyLocation() {
 const dzEl = document.getElementById('dz-search');
 const dzDd = document.getElementById('dz-dropdown');
 
-dzEl.addEventListener('input', () => {
+function _dzSearch() {
   const q = dzEl.value.trim().toLowerCase();
   if (q.length < 2) { closeDd(); return; }
   if (dzList === null) { showDd([{name: 'Loading drop zones…', city: '', state: '', lat: null, lng: null}]); return; }
+  if (dzListFailed) {
+    showDd([{name: `Search "${dzEl.value}"`, city: 'DZ list unavailable — try location search', state: '', lat: null, lng: null, geo: true}]);
+    return;
+  }
   const res = dzList
     .filter(d => d.name.toLowerCase().includes(q) || d.city.toLowerCase().includes(q) || d.state.toLowerCase().includes(q))
     .slice(0, 12);
   showDd(res.length ? res : [{name: `Search "${dzEl.value}"`, city: 'via location search', state: '', lat: null, lng: null, geo: true}]);
-});
+}
+
+dzEl.addEventListener('input', debounce(_dzSearch, 200));
 
 dzEl.addEventListener('keydown', e => {
   const items = dzDd.querySelectorAll('.dz-item');

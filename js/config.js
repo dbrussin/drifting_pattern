@@ -16,8 +16,31 @@ const R_FT = 20902231;
 const D2R  = Math.PI / 180;
 const R2D  = 180 / Math.PI;
 
+// ── Conversion constants ──────────────────────────────────────────────────────
+const FT_PER_NM          = 6076;    // feet per nautical mile
+const FT_MIN_PER_KT      = 101.269; // ft/min per knot (horizontal speed → descent rate)
+const DRIFT_STEP_FT      = 200;     // Riemann integration step for wind drift (ft)
+const MIN_WIND_SPD_KT    = 0.5;     // minimum wind speed for jump-run auto-heading (kts)
+const STATUTE_MI_PER_DEG = 69;      // approximate statute miles per degree of latitude
+const MIN_AGL_FT         = 50;      // minimum AGL threshold for pressure-level wind data (ft)
+
 // Wind cache TTL — 20 minutes
 const CACHE_MS = 20 * 60 * 1000;
+
+/**
+ * Returns a debounced version of fn that delays invocation by `wait` ms.
+ * Resets the timer on each call; only the last call within the window executes.
+ * @param {Function} fn - Function to debounce
+ * @param {number} wait - Delay in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(fn, wait) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
 
 // GFS API: pressure levels (hPa) to query for winds + temperature
 const PRESSURE_LEVELS = [1000, 975, 950, 925, 850, 700, 600, 500, 400, 300];

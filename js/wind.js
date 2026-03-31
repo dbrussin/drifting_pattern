@@ -119,7 +119,7 @@ function processWindData(d, fieldElevFt) {
     hi = d.hourly.time.reduce((best, t, i) =>
       Math.abs(new Date(t).getTime() - nowMs) < Math.abs(new Date(d.hourly.time[best]).getTime() - nowMs) ? i : best, 0);
   }
-  hi = Math.min(hi + (state.forecastOffset || 0), d.hourly.time.length - 1);
+  hi = Math.max(0, Math.min(hi + (state.forecastOffset || 0), d.hourly.time.length - 1));
 
   // Update header forecast time label
   const effectiveDate = new Date(d.hourly.time[hi]);
@@ -165,7 +165,7 @@ function processWindData(d, fieldElevFt) {
     if (spd != null && dir != null && hgt != null) {
       const mslFt = geopotentialToFtMSL(hgt);
       const aglFt = mslFt - state.fieldElevFt;
-      if (aglFt < 50) return; // below or at ground level, skip
+      if (aglFt < MIN_AGL_FT) return; // below or at ground level, skip
       rawWinds.push({altFt: mslFt, dirDeg: Math.round(dir), speedKts: Math.round(spd)});
       if (tmp != null) rawTemp.push({altFt: mslFt, tempC: tmp});
       pressureRows.push({
@@ -308,8 +308,10 @@ function buildWindTable() {
 
 function updateWindByIdx(i, field, val) {
   if (!state.winds[i]) return;
+  const parsed = val === '' ? null : parseFloat(val);
+  if (val !== '' && isNaN(parsed)) return; // reject non-numeric input
   _sortedWindsCache = null; _sortedTempCache = null; // invalidate caches
-  state.winds[i][field] = val === '' ? null : parseFloat(val);
+  state.winds[i][field] = parsed;
   if (state.winds[i].aglFt === 0) {
     if (!state.surfaceWind) state.surfaceWind = {dirDeg: null, speedKts: null};
     state.surfaceWind[field] = state.winds[i][field];
@@ -336,6 +338,6 @@ function updateWindStatusAge(ts) {
 const _windRefreshInterval = setInterval(() => {
   if (!state.target || document.hidden) return;
   const cached = findCachedWinds(state.target.lat, state.target.lng);
-  if (!cached) { fetchWinds().then(calculate); return; }
+  if (!cached) { fetchWinds().then(calculate).catch(e => console.error('Wind auto-refresh failed:', e)); return; }
   updateWindStatusAge(cached.ts);
 }, 60 * 1000);

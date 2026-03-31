@@ -63,7 +63,7 @@ async function placeTarget(lat, lng) {
   if (targetMarker) map.removeLayer(targetMarker);
   targetMarker = L.marker([lat, lng], {
     icon: L.divIcon({
-      html: `<div style="width:18px;height:18px;background:var(--accent);border-radius:50%;border:3px solid #fff;box-shadow:0 0 8px rgba(232,244,77,0.6);"></div>`,
+      html: `<div class="target-marker-dot"></div>`,
       iconSize: [18, 18], iconAnchor: [9, 9], className: '',
     }), zIndexOffset: 1000,
   }).addTo(map);
@@ -93,7 +93,7 @@ function agreeToWaiver() {
 
 function declineWaiver() {
   const modal = document.getElementById('waiver-modal');
-  modal.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-family:sans-serif;font-size:14px;text-align:center;padding:20px;">You must agree to the terms to use Pattern Planner.</div>';
+  modal.innerHTML = '<div class="waiver-decline-message">You must agree to the terms to use Pattern Planner.</div>';
 }
 
 // ── Init sequence ─────────────────────────────────────────────────────────────
@@ -104,10 +104,11 @@ checkWaiver();
 loadSettings();
 updateCanopyCalc();
 
-// Persist on any input/change
+// Persist on any input/change — debounce keystroke events to avoid saving on every character
+const _debouncedSave = debounce(saveSettings, 300);
 document.querySelectorAll('input').forEach(el => {
-  el.addEventListener('change', saveSettings);
-  el.addEventListener('input',  saveSettings);
+  el.addEventListener('change', saveSettings);    // change fires on commit — save immediately
+  el.addEventListener('input',  _debouncedSave);  // input fires on every keystroke — debounce
 });
 
 // ── Pull-to-refresh — pull down on the header bar ────────────────────────────
@@ -140,12 +141,15 @@ document.querySelectorAll('input').forEach(el => {
     if (dy >= PULL_THRESHOLD && state.target) {
       indicator.textContent = '⟳ Refreshing winds…';
       indicator.classList.add('visible');
-      fetchWinds(true).then(calculate).finally(() => {
-        setTimeout(() => {
-          indicator.textContent = '↓ Release to refresh winds';
-          indicator.classList.remove('visible');
-        }, 1200);
-      });
+      fetchWinds(true)
+        .then(calculate)
+        .catch(e => console.error('Pull-to-refresh failed:', e))
+        .finally(() => {
+          setTimeout(() => {
+            indicator.textContent = '↓ Release to refresh winds';
+            indicator.classList.remove('visible');
+          }, 1200);
+        });
     }
   }, {passive: true});
 })();

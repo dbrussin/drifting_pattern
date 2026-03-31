@@ -12,16 +12,15 @@
  */
 function integratedDrift(altTopAGL, altBotAGL, descentFtMin) {
   if (altTopAGL <= altBotAGL) return {dN: 0, dE: 0};
-  const STEP = 200;
   let dN = 0, dE = 0;
-  for (let agl = altBotAGL; agl < altTopAGL; agl += STEP) {
-    const bandTop = Math.min(agl + STEP, altTopAGL);
+  for (let agl = altBotAGL; agl < altTopAGL; agl += DRIFT_STEP_FT) {
+    const bandTop = Math.min(agl + DRIFT_STEP_FT, altTopAGL);
     const midAGL  = (agl + bandTop) / 2;
     const bandAlt = bandTop - agl;
     const w       = getWindAtAGL(midAGL);
     const tMin    = bandAlt / (descentFtMin * tasFactor(midAGL));
-    dN += w.n * (tMin / 60) * 6076;
-    dE += w.e * (tMin / 60) * 6076;
+    dN += w.n * (tMin / 60) * FT_PER_NM;
+    dE += w.e * (tMin / 60) * FT_PER_NM;
   }
   return {dN, dE};
 }
@@ -34,10 +33,9 @@ function integratedDrift(altTopAGL, altBotAGL, descentFtMin) {
  * @returns {{spd: number, dir: number}} Average wind speed (kts, rounded) and direction (° true, rounded)
  */
 function avgWindInBand(altBotAGL, altTopAGL) {
-  const STEP = 200;
   let sumN = 0, sumE = 0, count = 0;
-  for (let agl = altBotAGL; agl < altTopAGL; agl += STEP) {
-    const mid = (agl + Math.min(agl + STEP, altTopAGL)) / 2;
+  for (let agl = altBotAGL; agl < altTopAGL; agl += DRIFT_STEP_FT) {
+    const mid = (agl + Math.min(agl + DRIFT_STEP_FT, altTopAGL)) / 2;
     const w   = getWindAtAGL(mid);
     sumN += w.n; sumE += w.e; count++;
   }
@@ -115,7 +113,7 @@ function calculate() {
   if (jrHdg === null) {
     const wExit      = getWindAtAGL(altExit);
     const exitWindSpd = vecLen(wExit);
-    if (exitWindSpd > 0.5) {
+    if (exitWindSpd > MIN_WIND_SPD_KT) {
       const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
       jrHdg = (windVelDir + 180) % 360;
     } else {
@@ -131,9 +129,9 @@ function calculate() {
   const perfDW = getLegPerf('dw');
 
   // Descent rates (ft/min) — cSpd in kts × 101.269 = ft/min
-  const dRateF  = (perfF.cSpd  / perfF.glide)  * 101.269;
-  const dRateB  = (perfB.cSpd  / perfB.glide)  * 101.269;
-  const dRateDW = (perfDW.cSpd / perfDW.glide) * 101.269;
+  const dRateF  = (perfF.cSpd  / perfF.glide)  * FT_MIN_PER_KT;
+  const dRateB  = (perfB.cSpd  / perfB.glide)  * FT_MIN_PER_KT;
+  const dRateDW = (perfDW.cSpd / perfDW.glide) * FT_MIN_PER_KT;
 
   const tF = altF / (dRateF * tasFactor(altF / 2));
   const tB = (altB - altF) / (dRateB * tasFactor((altB + altF) / 2));
@@ -146,17 +144,18 @@ function calculate() {
   let fDisp, fHdgActual;
 
   if (state.legModes.f === 'crab') {
-    const dfN = wF.n * (tF / 60) * 6076, dfE = wF.e * (tF / 60) * 6076;
+    const dfN = wF.n * (tF / 60) * FT_PER_NM, dfE = wF.e * (tF / 60) * FT_PER_NM;
     const bfc = -2 * (fVec.n * dfN + fVec.e * dfE);
     const cfc = dfN ** 2 + dfE ** 2 - fStillFt ** 2;
     const dfc = bfc ** 2 - 4 * cfc;
-    const kf  = dfc >= 0 ? (-bfc + Math.sqrt(Math.max(0, dfc))) / 2 : fStillFt;
+    if (dfc < 0) console.warn('calculate: final crab discriminant < 0 — crosswind too strong, using still-air fallback');
+    const kf  = dfc >= 0 ? (-bfc + Math.sqrt(dfc)) / 2 : fStillFt;
     const fRN = fVec.n * kf - dfN, fRE = fVec.e * kf - dfE;
     fHdgActual = (Math.atan2(fRE, fRN) * R2D + 360) % 360;
     fDisp      = {dN: fRN + dfN, dE: fRE + dfE};
   } else {
     fHdgActual = fHdg;
-    fDisp = {dN: fVec.n * fStillFt + wF.n * (tF / 60) * 6076, dE: fVec.e * fStillFt + wF.e * (tF / 60) * 6076};
+    fDisp = {dN: fVec.n * fStillFt + wF.n * (tF / 60) * FT_PER_NM, dE: fVec.e * fStillFt + wF.e * (tF / 60) * FT_PER_NM};
   }
 
   const {lat: tLat, lng: tLng} = state.target;
@@ -173,24 +172,25 @@ function calculate() {
   const bTE = bOverride != null ? hdgVec(bOverride).e : (state.hand === 'left' ?  fTrackUnit.n : -fTrackUnit.n);
 
   if (state.legModes.b === 'crab') {
-    const dbN = wB.n * (tB / 60) * 6076, dbE = wB.e * (tB / 60) * 6076;
+    const dbN = wB.n * (tB / 60) * FT_PER_NM, dbE = wB.e * (tB / 60) * FT_PER_NM;
     const bc  = -2 * (bTN * dbN + bTE * dbE);
     const cc  = dbN ** 2 + dbE ** 2 - bStillFt ** 2;
     const bd  = bc ** 2 - 4 * cc;
-    const bk  = bd >= 0 ? (-bc + Math.sqrt(Math.max(0, bd))) / 2 : bStillFt;
+    if (bd < 0) console.warn('calculate: base crab discriminant < 0 — crosswind too strong, using still-air fallback');
+    const bk  = bd >= 0 ? (-bc + Math.sqrt(bd)) / 2 : bStillFt;
     const bRN = bTN * bk - dbN, bRE = bTE * bk - dbE;
     bHdg  = (Math.atan2(bRE, bRN) * R2D + 360) % 360;
     bDisp = {dN: bRN + dbN, dE: bRE + dbE};
   } else {
     bHdg  = bOverride ?? (state.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
-    bDisp = {dN: hdgVec(bHdg).n * bStillFt + wB.n * (tB / 60) * 6076, dE: hdgVec(bHdg).e * bStillFt + wB.e * (tB / 60) * 6076};
+    bDisp = {dN: hdgVec(bHdg).n * bStillFt + wB.n * (tB / 60) * FT_PER_NM, dE: hdgVec(bHdg).e * bStillFt + wB.e * (tB / 60) * FT_PER_NM};
   }
   const tBase = offsetLL(tFinal.lat, tFinal.lng, -bDisp.dN, -bDisp.dE);
 
   // ── Downwind leg ──
   const wD       = getWindAtAGL((altE + altB) / 2);
   const dStillFt = (altE - altB) * perfDW.glide;
-  const driftN   = wD.n * (tD / 60) * 6076, driftE = wD.e * (tD / 60) * 6076;
+  const driftN   = wD.n * (tD / 60) * FT_PER_NM, driftE = wD.e * (tD / 60) * FT_PER_NM;
   let dwHdg, dDisp;
 
   // Target track direction: override > Z=upwind (fTrackUnit) > normal=downwind (-fTrackUnit)
@@ -210,7 +210,8 @@ function calculate() {
     const b1 = -2 * (dwTN * driftN + dwTE * driftE);
     const c1 = driftN ** 2 + driftE ** 2 - dStillFt ** 2;
     const d1 = b1 ** 2 - 4 * c1;
-    const k1 = d1 >= 0 ? (-b1 + Math.sqrt(Math.max(0, d1))) / 2 : dStillFt;
+    if (d1 < 0) console.warn('calculate: downwind crab discriminant < 0 — crosswind too strong, using still-air fallback');
+    const k1 = d1 >= 0 ? (-b1 + Math.sqrt(d1)) / 2 : dStillFt;
     const rN = dwTN * k1 - driftN, rE = dwTE * k1 - driftE;
     dwHdg = (Math.atan2(rE, rN) * R2D + 360) % 360;
     dDisp = {dN: rN + driftN, dE: rE + driftE};
@@ -238,11 +239,11 @@ function calculate() {
       if (xl.alt <= topAlt) return; // altitude must be above current top
 
       const xlPerf   = getLegPerf(xl.id);
-      const dRateXL  = (xlPerf.cSpd / xlPerf.glide) * 101.269;
+      const dRateXL  = (xlPerf.cSpd / xlPerf.glide) * FT_MIN_PER_KT;
       const tXL      = (xl.alt - topAlt) / (dRateXL * tasFactor((xl.alt + topAlt) / 2));
       const wXL      = getWindAtAGL((xl.alt + topAlt) / 2);
-      const driftXLN = wXL.n * (tXL / 60) * 6076;
-      const driftXLE = wXL.e * (tXL / 60) * 6076;
+      const driftXLN = wXL.n * (tXL / 60) * FT_PER_NM;
+      const driftXLE = wXL.e * (tXL / 60) * FT_PER_NM;
 
       // Approach heading is user-specified via the per-leg heading input
       const nomHdg = ((parseFloat(document.getElementById(`hdg-${xl.id}`)?.value) || 0) + 3600) % 360;
@@ -256,7 +257,8 @@ function calculate() {
         const b1 = -2 * (tN * driftXLN + tE * driftXLE);
         const c1 = driftXLN ** 2 + driftXLE ** 2 - xStillFt ** 2;
         const d1 = b1 ** 2 - 4 * c1;
-        const k1 = d1 >= 0 ? (-b1 + Math.sqrt(Math.max(0, d1))) / 2 : xStillFt;
+        if (d1 < 0) console.warn(`calculate: extra leg ${xl.id} crab discriminant < 0 — using still-air fallback`);
+        const k1 = d1 >= 0 ? (-b1 + Math.sqrt(d1)) / 2 : xStillFt;
         const rN = tN * k1 - driftXLN, rE = tE * k1 - driftXLE;
         xlHdg  = (Math.atan2(rE, rN) * R2D + 360) % 360;
         xlDisp = { dN: rN + driftXLN, dE: rE + driftXLE };

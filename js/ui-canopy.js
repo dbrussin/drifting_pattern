@@ -77,18 +77,12 @@ function updateLegCanopyCalc(leg) {
   const speedEl = document.getElementById(`${leg}-speed`);
   const glideEl = document.getElementById(`${leg}-glide`);
 
-  if (third === 'sink' && !isNaN(g) && !isNaN(s)) {
-    const calc = Math.round((s / g) * 10) / 10;
-    sinkEl.value = calc; sinkEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated vertical: ${calc} kts`;
-  } else if (third === 'speed' && !isNaN(g) && !isNaN(k)) {
-    const calc = Math.round(k * g * 10) / 10;
-    speedEl.value = calc; speedEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated horiz: ${calc} kts`;
-  } else if (third === 'glide' && !isNaN(s) && !isNaN(k)) {
-    const calc = Math.round((s / k) * 10) / 10;
-    glideEl.value = calc; glideEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated glide: ${calc}:1`;
+  const calc = canopyThird(g, s, k, third);
+  if (calc !== null) {
+    const labels = {sink: `Calculated vertical: ${calc} kts`, speed: `Calculated horiz: ${calc} kts`, glide: `Calculated glide: ${calc}:1`};
+    const elMap  = {sink: sinkEl, speed: speedEl, glide: glideEl};
+    if (elMap[third]) { elMap[third].value = calc; elMap[third].style.color = 'var(--muted)'; }
+    if (noteEl) noteEl.textContent = labels[third];
   } else if (noteEl) noteEl.textContent = '';
 
   [['glide', glideEl], ['speed', speedEl], ['sink', sinkEl]].forEach(([f, el]) => {
@@ -114,6 +108,24 @@ function getLegPerf(leg) {
   };
 }
 
+// ── Shared three-way canopy performance solver ────────────────────────────────
+
+/**
+ * Compute the third canopy performance value given any two.
+ * Relationship: vertical_kts = horizontal_kts / glide_ratio
+ * @param {number} g - Glide ratio (NaN = not provided)
+ * @param {number} s - Horizontal speed kts (NaN = not provided)
+ * @param {number} k - Vertical speed kts (NaN = not provided)
+ * @param {string} third - The field to compute ('glide' | 'speed' | 'sink')
+ * @returns {number|null} Computed value rounded to 1 decimal, or null if inputs insufficient
+ */
+function canopyThird(g, s, k, third) {
+  if (third === 'sink'  && !isNaN(g) && !isNaN(s)) return Math.round((s / g) * 10) / 10;
+  if (third === 'speed' && !isNaN(g) && !isNaN(k)) return Math.round(k * g * 10) / 10;
+  if (third === 'glide' && !isNaN(s) && !isNaN(k)) return Math.round((s / k) * 10) / 10;
+  return null;
+}
+
 // ── Global canopy performance (any two → third calculated) ───────────────────
 
 let canopyLastEdited = ['glide', 'speed']; // default: glide + speed → sink calculated
@@ -133,30 +145,22 @@ function updateCanopyCalc() {
   const speedEl = document.getElementById('canopy-speed');
   const sinkEl  = document.getElementById('canopy-sink');
   const noteEl  = document.getElementById('canopy-calc-note');
+  if (!glideEl || !speedEl || !sinkEl) return;
 
   const g = parseFloat(glideEl.value);
   const s = parseFloat(speedEl.value);
   const k = parseFloat(sinkEl.value);
 
-  // Relationship: vertical_kts = horizontal_kts / glide_ratio
   const [a, b] = canopyLastEdited;
   const third  = ['glide', 'speed', 'sink'].find(f => f !== a && f !== b);
+  const calc   = canopyThird(g, s, k, third);
 
-  if (third === 'sink' && !isNaN(g) && !isNaN(s)) {
-    const calc = Math.round((s / g) * 10) / 10;
-    sinkEl.value       = calc;
-    sinkEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated vertical speed: ${calc} kts`;
-  } else if (third === 'speed' && !isNaN(g) && !isNaN(k)) {
-    const calc = Math.round(k * g * 10) / 10;
-    speedEl.value       = calc;
-    speedEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated horiz speed: ${calc} kts`;
-  } else if (third === 'glide' && !isNaN(s) && !isNaN(k)) {
-    const calc = Math.round((s / k) * 10) / 10;
-    glideEl.value       = calc;
-    glideEl.style.color = 'var(--muted)';
-    if (noteEl) noteEl.textContent = `Calculated glide: ${calc}:1`;
+  if (calc !== null) {
+    const labels = {sink: `Calculated vertical speed: ${calc} kts`, speed: `Calculated horiz speed: ${calc} kts`, glide: `Calculated glide: ${calc}:1`};
+    const elMap  = {sink: sinkEl, speed: speedEl, glide: glideEl};
+    elMap[third].value       = calc;
+    elMap[third].style.color = 'var(--muted)';
+    if (noteEl) noteEl.textContent = labels[third];
   } else {
     if (noteEl) noteEl.textContent = '';
   }
