@@ -196,6 +196,7 @@ input[type=number] { -moz-appearance: textfield; }
 }
 .section-label:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 .field-note { font-size: 12px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 5px; line-height: 1.5; }
+.field-note-mb { margin-bottom: 10px; }
 
 /* ── WINDS ── */
 .wind-header { display: grid; grid-template-columns: 58px 1fr 1fr 44px; gap: 6px; margin-bottom: 6px; }
@@ -365,6 +366,7 @@ input[type=number] { -moz-appearance: textfield; }
 }
 
 /* ── SETTINGS OVERLAY ── */
+#jr-offset { color: var(--muted); }
 .section-label--action { display: flex; align-items: center; justify-content: space-between; }
 #canopy-calc-note { margin-top: 4px; min-height: 1em; }
 .field-note-sm { margin-top: 2px; }
@@ -452,4 +454,49 @@ input[type=number] { -moz-appearance: textfield; }
   border: 1px solid var(--border); border-radius: 6px;
   font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
   font-weight: 600; letter-spacing: 0.06em; cursor: pointer;
+}
+.waiver-decline-message {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  color: var(--muted); font-size: 14px; text-align: center; padding: 20px; line-height: 1.5;
+}
+
+/* ── TARGET MARKER ── */
+.target-marker-dot {
+  width: 18px; height: 18px;
+  background: var(--accent); border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 8px rgba(232,244,77,0.6);
+}
+
+/* ── JUMP RUN OFFSET RESET BUTTON ── */
+.jr-offset-reset {
+  cursor: pointer; color: var(--accent2); font-size: 9px; margin-left: 4px;
+}
+
+/* ── LEGEND SWATCH COLORS ── */
+.leg-swatch-downwind { background: var(--downwind-color); }
+.leg-swatch-base     { background: var(--base-color); }
+.leg-swatch-final    { background: var(--final-color); }
+
+/* ── LAYER TOGGLE min-height for touch targets ── */
+.layer-toggle { min-height: 32px; }
+
+/* ── HELP INLINE ELEMENTS ── */
+.help-inline-icon { vertical-align: middle; }
+
+/* ── HELP COLORED TEXT ── */
+.help-accent-text  { color: var(--accent); }
+.help-accent2-text { color: var(--accent2); }
+.help-warning {
+  color: var(--accent); font-weight: 700; margin-bottom: 6px;
+}
+
+/* ── ACCESSIBILITY: focus styles for keyboard nav ── */
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent2); outline-offset: 2px;
+}
+
+/* ── REDUCED MOTION ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }

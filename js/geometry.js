@@ -24,8 +24,8 @@ function normalize(v) { const l = vecLen(v) || 1; return {n: v.n / l, e: v.e / l
 
 // Approximate great-circle distance in statute miles between two {lat,lng} points
 function distMiles(a, b) {
-  const dLat = (a.lat - b.lat) * 69;
-  const dLng = (a.lng - b.lng) * 69 * Math.cos(a.lat * Math.PI / 180);
+  const dLat = (a.lat - b.lat) * STATUTE_MI_PER_DEG;
+  const dLng = (a.lng - b.lng) * STATUTE_MI_PER_DEG * Math.cos(a.lat * Math.PI / 180);
   return Math.sqrt(dLat ** 2 + dLng ** 2);
 }
 

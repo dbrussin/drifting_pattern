@@ -44,7 +44,10 @@ function saveSettings() {
         if (el && el.value !== '') localStorage.setItem(storageKey(`${leg}_${field}`), el.value);
       });
     });
-  } catch(e) { console.warn('saveSettings error:', e); }
+  } catch(e) {
+    console.warn('saveSettings error:', e);
+    if (e.name === 'QuotaExceededError' || e.code === 22) setStatus('Storage full — settings not saved');
+  }
 }
 
 function resetAllSettings() {
