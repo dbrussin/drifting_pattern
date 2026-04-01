@@ -52,7 +52,7 @@ function renderLegs() {
         <label style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">Alt (ft AGL)</label>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="range" id="alt-${xl.id}-sl" min="200" max="5000" step="50" value="${xl.defaultAlt}" style="flex:1;min-width:0;accent-color:var(--accent);" oninput="onLegAlt('alt-${xl.id}','slider')">
-          <input type="number" id="alt-${xl.id}" value="${xl.defaultAlt}" min="200" max="5000" step="50" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text);background:transparent;border:none;border-bottom:1px solid var(--border);width:56px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onLegAlt('alt-${xl.id}','input')">
+          <input type="number" id="alt-${xl.id}" value="${xl.defaultAlt}" min="200" max="5000" step="50" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text);background:transparent;border:none;border-bottom:1px solid var(--border);width:56px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onLegAlt('alt-${xl.id}','input')" onblur="onLegAlt('alt-${xl.id}','blur')">
         </div>
       </div>
       <div style="margin-bottom:6px;">
@@ -156,7 +156,7 @@ function renderLegs() {
         <label style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">${altLabel}</label>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="range" id="${altId}-sl" min="${altMin}" max="${altMax}" step="${altStep}" value="${altDefault}" style="flex:1;min-width:0;accent-color:var(--accent);" oninput="onLegAlt('${altId}','slider')">
-          <input type="number" id="${altId}" value="${altDefault}" min="${altMin}" max="${altMax}" step="${altStep}" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text);background:transparent;border:none;border-bottom:1px solid var(--border);width:56px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onLegAlt('${altId}','input')">
+          <input type="number" id="${altId}" value="${altDefault}" min="${altMin}" max="${altMax}" step="${altStep}" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text);background:transparent;border:none;border-bottom:1px solid var(--border);width:56px;text-align:center;padding:2px 0;flex-shrink:0;" oninput="onLegAlt('${altId}','input')" onblur="onLegAlt('${altId}','blur')">
         </div>
       </div>
       ${finalHdgRow}
@@ -191,6 +191,13 @@ function renderLegs() {
     `;
     container.appendChild(card);
   });
+
+  // Reset to defaults button
+  const resetBtn = document.createElement('button');
+  resetBtn.style.cssText = 'width:100%;margin-top:6px;font-family:"Space Mono",monospace;font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:4px;padding:6px;cursor:pointer;letter-spacing:0.06em;text-transform:uppercase;';
+  resetBtn.textContent = 'Reset to Defaults';
+  resetBtn.onclick = resetPatternLegs;
+  container.appendChild(resetBtn);
 
   // Restore snapshotted values/states into newly created elements
   Object.entries(snap).forEach(([id, s]) => {
@@ -265,23 +272,31 @@ function applySliderRange(numId) {
   sl.max = c.max;
   const v       = parseFloat(num.value);
   const clamped = Math.max(c.min, Math.min(c.max, v));
-  if (!isNaN(clamped) && clamped !== v) { num.value = clamped; sl.value = clamped; }
+  if (!isNaN(clamped) && clamped !== v && document.activeElement !== num) { num.value = clamped; sl.value = clamped; }
 }
 
 function onLegAlt(numId, src) {
   const sl  = document.getElementById(numId + '-sl');
   const num = document.getElementById(numId);
   if (!sl || !num) return;
-  if (src === 'slider') { num.value = sl.value; num.style.color = 'var(--text)'; }
-  else                  { sl.value  = num.value; }
-
-  // Clamp this input then refresh all slider ranges (adjacent legs may now have
-  // different valid ranges)
-  applySliderRange(numId);
-  updateAllSliderRanges();
-
-  saveSettings();
-  if (state.target) calculate();
+  if (src === 'slider') {
+    num.value = sl.value; num.style.color = 'var(--text)';
+    applySliderRange(numId);
+    updateAllSliderRanges();
+    saveSettings();
+    if (state.target) calculate();
+  } else if (src === 'blur') {
+    // On blur: apply clamping, refresh adjacent ranges, save
+    applySliderRange(numId);
+    updateAllSliderRanges();
+    saveSettings();
+    if (state.target) calculate();
+  } else {
+    // On input (typing): sync slider position only — defer clamping to blur
+    // so partial values don't get overwritten mid-keystroke
+    sl.value = num.value;
+    if (state.target) calculate();
+  }
 }
 
 // ── Jump run alt cross-field enforcement ──────────────────────────────────────
@@ -315,12 +330,49 @@ function onExtraLegHdg(id, src) {
   const sl  = document.getElementById(`hdg-sl-${id}`);
   const inp = document.getElementById(`hdg-${id}`);
   if (!sl || !inp) return;
-  if (src === 'slider') { inp.value = sl.value; }
-  else                  { sl.value  = ((parseInt(inp.value) || 0) + 360) % 360; }
+  if (src === 'slider') {
+    inp.value = sl.value;
+  } else {
+    const d = ((parseInt(inp.value) || 0) + 360) % 360;
+    inp.value = d;
+    sl.value  = d;
+  }
   const xl = state.extraLegs.find(x => x.id === id);
   if (xl) xl.nomHdg = parseInt(inp.value) || 0;
   saveSettings();
   if (state.pattern) calculate();
+}
+
+// ── Reset pattern legs to defaults ────────────────────────────────────────────
+
+function resetPatternLegs() {
+  // Clean up state for all extra legs
+  state.extraLegs.forEach(xl => {
+    delete state.legModes[xl.id];
+    delete state.legCustomPerf[xl.id];
+    delete legLastEdited[xl.id];
+    if (state.legHdgOverride) delete state.legHdgOverride[xl.id];
+  });
+  state.extraLegs       = [];
+  state.nextExtraLegIdx = 1;
+
+  // Reset standard leg altitudes to defaults
+  LEG_DEFS.forEach(def => {
+    const el   = document.getElementById(def.altId);
+    const slEl = document.getElementById(def.altId + '-sl');
+    if (el)   el.value   = def.altDefault;
+    if (slEl) slEl.value = def.altDefault;
+    if (state.legHdgOverride) state.legHdgOverride[def.key] = null;
+  });
+
+  // Reset leg modes and pattern options to defaults
+  state.legModes      = Object.fromEntries(LEG_DEFS.map(l => [l.key, l.key === 'b' ? 'drift' : 'crab']));
+  state.zPattern      = false;
+  state.legCustomPerf = Object.fromEntries(LEG_DEFS.map(l => [l.key, false]));
+
+  renderLegs();
+  saveSettings();
+  if (state.target) calculate();
 }
 
 // ── Add / remove extra legs ────────────────────────────────────────────────────
@@ -401,8 +453,13 @@ function onStdLegHdg(key, src) {
   const sl  = document.getElementById(`${key}-hdg-sl`);
   const inp = document.getElementById(`${key}-hdg`);
   if (!sl || !inp) return;
-  if (src === 'slider') inp.value = sl.value;
-  else sl.value = ((parseInt(inp.value) || 0) + 360) % 360;
+  if (src === 'slider') {
+    inp.value = sl.value;
+  } else {
+    const d = ((parseInt(inp.value) || 0) + 360) % 360;
+    inp.value = d;
+    sl.value  = d;
+  }
   if (!state.legHdgOverride) state.legHdgOverride = {};
   state.legHdgOverride[key] = parseInt(inp.value) || 0;
   saveSettings();

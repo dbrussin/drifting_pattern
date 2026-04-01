@@ -126,11 +126,15 @@ function drawPattern() {
     const dRate  = (p.cSpd / p.glide) * 101.269;
     const margin = 1 - p.safetyPct;
 
+    // Topmost pattern entry point: highest extra leg entry (if any), else downwind entry
+    const topEntry  = p.extraLegs?.length ? p.extraLegs[p.extraLegs.length - 1].entry  : entry;
+    const topAltAGL = p.extraLegs?.length ? p.extraLegs[p.extraLegs.length - 1].altTop : p.altE;
+
     // Draw one circle zone; returns center point
     function drawZone(centerAGL, radiusFt, driftAGL, borderColor, fillColor, fillOpacity, borderOpacity, borderWidth) {
       const drift = integratedDrift(driftAGL.top, driftAGL.bot, driftAGL.rate);
       const r     = radiusFt * margin * 0.3048; // metres, with safety margin
-      const ctr   = offsetLL(entry.lat, entry.lng, -drift.dN, -drift.dE);
+      const ctr   = offsetLL(topEntry.lat, topEntry.lng, -drift.dN, -drift.dE);
       addL(L.circle([ctr.lat, ctr.lng], {
         radius: r, color: borderColor, weight: borderWidth,
         fill: false, interactive: false,
@@ -165,10 +169,10 @@ function drawPattern() {
     }
 
     // ── Shared geometry (used by multiple layers) ──
-    const canopyRange  = p.altOpen - p.altE;
-    const openDrift    = integratedDrift(p.altOpen, p.altE, dRate);
+    const canopyRange  = p.altOpen - topAltAGL;
+    const openDrift    = integratedDrift(p.altOpen, topAltAGL, dRate);
     const openRadiusFt = canopyRange * p.glide;
-    const openCtr      = offsetLL(entry.lat, entry.lng, -openDrift.dN, -openDrift.dE);
+    const openCtr      = offsetLL(topEntry.lat, topEntry.lng, -openDrift.dN, -openDrift.dE);
     const ffRateFtMin2 = p.ffSpeedMph * 88;
     const ffDrift2     = integratedDrift(p.altExit, p.altOpen, ffRateFtMin2);
     const exitCenter   = offsetLL(openCtr.lat, openCtr.lng, -ffDrift2.dN, -ffDrift2.dE);
@@ -184,16 +188,16 @@ function drawPattern() {
 
       [2, 1, 0].forEach(i => {
         const h      = hStep3 * (i + 1);
-        const topAGL = p.altE + h;
-        const botAGL = p.altE;
+        const topAGL = topAltAGL + h;
+        const botAGL = topAltAGL;
         const rc     = ringColors[i];
         const ctr    = drawZone(
-          p.altE, h * p.glide,
+          topAltAGL, h * p.glide,
           {top: topAGL, bot: botAGL, rate: dRate},
           rc.border, rc.fill, rc.fillOp, 1, rc.bw
         );
         const avg      = avgWindInBand(botAGL, topAGL);
-        const altLabel = Math.round(p.altE + h).toLocaleString();
+        const altLabel = Math.round(topAltAGL + h).toLocaleString();
         zoneLabel(ctr, h * p.glide,
           `${altLabel}ft · ${avg.spd}kt`,
           rc.border.replace(/[\d.]+\)$/, '1)'),
@@ -201,7 +205,7 @@ function drawPattern() {
       });
 
       // ── Opening altitude ring ──
-      const openAvg = avgWindInBand(p.altE, p.altOpen);
+      const openAvg = avgWindInBand(topAltAGL, p.altOpen);
       addL(L.circle([openCtr.lat, openCtr.lng], {
         radius: openRadiusFt * margin * 0.3048,
         color: 'rgba(255,210,80,0.95)', weight: 2.5,
