@@ -11,9 +11,9 @@ Open `dz-pattern.html` directly in any modern web browser — no build step or i
 The application is split across multiple files:
 
 ```
-dz-pattern.html      — slim HTML shell (~485 lines); has ~250 inline style attrs (known debt)
+dz-pattern.html      — slim HTML shell (~410 lines); no inline style attributes
 css/app.css          — all styles; uses CSS custom properties for theming
-js/config.js         — physical constants, API config, LEG_DEFS, EXTRA_LEG_COLORS, @typedef annotations
+js/config.js         — physical constants, conversion constants, API config, LEG_DEFS, EXTRA_LEG_COLORS, debounce(), @typedef annotations
 js/state.js          — global `state` object, PERSIST_INPUTS list, STORAGE_VERSION
 js/storage.js        — localStorage persistence, wind cache, loadSettings()/saveSettings()
 js/geometry.js       — spherical math, wind interpolation, TAS factor (ISA model)
@@ -127,7 +127,7 @@ All keys use the `pp_` prefix (via `storageKey(k)` helper in `storage.js`). A ve
 |------|------|-----------|
 | Wind fetching & processing | `wind.js` | `fetchWinds()`, `processWindData()`, `interpolateWind()`, `buildWindTable()` |
 | Pattern calculation | `calculate.js` | `calculate()`, `integratedDrift()`, `avgWindInBand()` |
-| Canopy performance | `ui-canopy.js` | `updateCanopyCalc()`, `updateLegCanopyCalc()`, `getLegPerf()` |
+| Canopy performance | `ui-canopy.js` | `canopyThird()`, `updateCanopyCalc()`, `updateLegCanopyCalc()`, `getLegPerf()` |
 | Leg mode toggles | `ui-canopy.js` | `setLegMode()`, `toggleZPattern()`, `updatePerfSections()` |
 | Map drawing | `draw.js` | Leaflet polylines for pattern legs, exit circle, jump run overlay |
 | UI overlays & layers | `ui-overlays.js` | `toggleOverlay()`, `closeOverlay()`, `toggleLayer()`, `setHand()`, `setStatus()` |
@@ -139,9 +139,9 @@ All keys use the `pp_` prefix (via `storageKey(k)` helper in `storage.js`). A ve
 ## CSS Architecture
 
 - All styles in `css/app.css`, organized by component with `/* ── SECTION ── */` comments
-- **Known debt**: ~250 inline style declarations remain in `dz-pattern.html` (waiver modal, forecast controls, heading bar, help overlay). These should be extracted to named CSS classes.
+- No inline `style=` attributes in `dz-pattern.html` — all styling is in `css/app.css`
 - Button variants: `.zoom-btn`, `.map-icon-btn`, `.fetch-btn`, `.add-leg-btn`, `.leg-remove-btn`, `.leg-mode-btn` — share font-family/border-radius/cursor/transition but not yet consolidated to a base class
-- No `@media` breakpoints — uses CSS `min()` for responsive overlay widths
+- No `@media` breakpoints — uses CSS `min()` for responsive overlay widths; `@media (prefers-reduced-motion: reduce)` collapses all transitions
 
 ### CSS Custom Properties (`:root`)
 
@@ -170,8 +170,11 @@ All keys use the `pp_` prefix (via `storageKey(k)` helper in `storage.js`). A ve
 - Button families: `.zoom-btn`, `.map-icon-btn`, `.fetch-btn`, `.add-leg-btn`, `.leg-remove-btn`, `.leg-mode-btn`, `.layer-toggle`
 - Wind table: `.wind-row`, `.wind-header`, `.alt-label`, `.temp-label`
 - Leg details: `.leg-details`, `.leg-details-summary`, `.leg-details-arrow`, `.leg-details-body`
-- Help overlay: `.help-section`, `.help-heading`
-- Utility: `.field-note`, `.section-label`, `.hand-toggle`
+- Help overlay: `.help-section`, `.help-heading`, `.help-accent-text`, `.help-accent2-text`, `.help-warning`, `.help-inline-icon`
+- Waiver: `.waiver-modal`, `.waiver-card`, `.waiver-header`, `.waiver-body`, `.waiver-footer`, `.waiver-decline-message`
+- Map: `.target-marker-dot` (landing target divIcon), `.leg-swatch-downwind`, `.leg-swatch-base`, `.leg-swatch-final` (legend)
+- Settings: `.jr-offset-reset` (reset button), `#jr-offset` default muted color
+- Utility: `.field-note`, `.field-note-mb`, `.section-label`, `.hand-toggle`
 
 ## Common Modification Recipes
 
@@ -182,7 +185,7 @@ All keys use the `pp_` prefix (via `storageKey(k)` helper in `storage.js`). A ve
 4. `saveSettings()` / `loadSettings()` handle it automatically via the PERSIST_INPUTS loop
 
 ### Adding a new map layer toggle
-1. Add a `<div class="layer-toggle">` row in the Layers section of `dz-pattern.html`
+1. Add a `<div class="layer-toggle" role="button" tabindex="0" aria-label="…">` row in the Layers section of `dz-pattern.html`
 2. Add the layer key to `state.layers` in `js/state.js`
 3. In `draw.js`, wrap the relevant drawing code in `if (state.layers.yourKey)`
 4. Wire the toggle button's `onclick` to `toggleLayer('yourKey')`
@@ -200,14 +203,17 @@ All keys use the `pp_` prefix (via `storageKey(k)` helper in `storage.js`). A ve
 
 ## Known Technical Debt
 
-- **Inline styles**: ~250 declarations in HTML should move to `css/app.css`. Priority targets: waiver modal (~60), forecast controls (~30), layers overlay (~20), jump run row (~20), help paragraphs (~20).
-- **Duplicated canopy calc**: `updateCanopyCalc()` and `updateLegCanopyCalc()` share logic — could extract to a shared helper
-- **Magic numbers**: Constants like `6076` (ft/nm), `101.269` (ft/min per kt), `200` (drift step ft), `0.5` (min wind speed threshold), `69` (statute miles per degree) should move to `config.js`
-- **Silent error handling**: Many `try/catch` blocks silently swallow errors; network errors show generic messages
-- **No input validation**: Numeric inputs rely on HTML `min`/`max` only; no JS clamping for out-of-range values
-- **renderLegs() rebuilds all DOM**: Should add/remove individual cards instead of clearing innerHTML each time
-- **Memory leaks**: Event listeners orphaned when `renderLegs()` clears innerHTML
-- **NaN propagation**: `updateWindByIdx()` stores `parseFloat(val)` which can be NaN on non-numeric input
+- **Silent error handling**: Some `try/catch` blocks still swallow errors silently (e.g. `initStorage()`, `loadSettings()` outer catch); network errors show generic messages
+- **No JS input validation**: Numeric inputs rely on HTML `min`/`max` only; no JS clamping for out-of-range values
+- **renderLegs() rebuilds all DOM**: Should add/remove individual cards instead of clearing `innerHTML` each time
+- **Memory leaks**: Event listeners orphaned when `renderLegs()` clears `innerHTML`
+- **Keyboard navigation**: After geocoding re-populates the search dropdown, `dzIdx` resets and arrow-key navigation starts over
+
+### Resolved (do not re-report)
+- ~~Inline styles~~: All moved to `css/app.css`; `dz-pattern.html` has zero `style=` attributes
+- ~~Magic numbers~~: `FT_PER_NM`, `FT_MIN_PER_KT`, `DRIFT_STEP_FT`, `MIN_WIND_SPD_KT`, `STATUTE_MI_PER_DEG`, `MIN_AGL_FT` are all in `config.js`
+- ~~Duplicated canopy calc~~: Shared `canopyThird(g, s, k, third)` helper in `ui-canopy.js`
+- ~~NaN propagation~~: `updateWindByIdx()` now rejects non-numeric input before storing
 
 ## Domain Glossary
 
