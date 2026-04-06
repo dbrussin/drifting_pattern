@@ -129,66 +129,100 @@ function getTempAtAGL(agl) {
 
 /**
  * Approximate magnetic declination (degrees, east positive) for a given lat/lon.
- * Uses WMM2025 Gauss coefficients through degree/order 3 (Schmidt quasi-normal).
- * Accuracy: ~1–2° for most mid-latitudes. Not for navigation; display only.
+ * Uses WMM2025 Gauss coefficients through degree/order 6 with secular variation.
+ * Accuracy: ~0.3–0.5° for most locations. Not for navigation; display only.
  * @param {number} latDeg - Geodetic latitude (°)
  * @param {number} lonDeg - Longitude (°)
  * @returns {number} Magnetic declination in degrees (positive = east of north)
  */
 function magDeclination(latDeg, lonDeg) {
-  // WMM2025 main-field Gauss coefficients g_nm, h_nm (nT), through n=3
-  // Source: NOAA WMM2025 coefficient file (epoch 2025.0)
-  // Indexed as G[n][m] and H[n][m] (m=0..n); h_n0 = 0 by definition.
-  const G = [
-    [],                                          // n=0 (unused)
-    [-29351.8, -1410.8,        0,       0],      // n=1: m=0,1
-    [ -2556.6,  2951.0,   1580.6,       0],      // n=2: m=0,1,2
-    [  1361.0, -2404.0,   1243.8,   453.6],      // n=3: m=0,1,2,3
+  // WMM2025 Gauss coefficients [n, m, g_nm(nT), h_nm(nT), ġ_nm(nT/yr), ḣ_nm(nT/yr)]
+  // Source: NOAA WMM2025, epoch 2025.0, released 2024-11-13.
+  // Secular variation applied as: g(t) = g(2025.0) + ġ * (t − 2025.0)
+  const WMM = [
+    [1,0,-29351.8,     0.0, 12.0,   0.0],
+    [1,1,  -1410.8,  4545.4,  9.7, -21.5],
+    [2,0,  -2556.6,     0.0,-11.6,   0.0],
+    [2,1,   2951.1, -3133.6, -5.2, -27.7],
+    [2,2,   1649.3,  -815.1, -8.0, -12.1],
+    [3,0,   1361.0,     0.0, -1.3,   0.0],
+    [3,1,  -2404.1,   -56.6, -4.2,   4.0],
+    [3,2,   1243.8,   237.5,  0.4,  -0.3],
+    [3,3,    453.6,  -549.5,-15.6,  -4.1],
+    [4,0,    895.0,     0.0, -1.6,   0.0],
+    [4,1,    799.5,   278.6, -2.4,  -1.1],
+    [4,2,     55.7,  -133.9, -6.0,   4.1],
+    [4,3,   -281.1,   212.0,  5.6,   1.6],
+    [4,4,     12.1,  -375.6, -7.0,  -4.4],
+    [5,0,   -233.2,     0.0,  0.6,   0.0],
+    [5,1,    368.9,    45.4,  1.4,  -0.5],
+    [5,2,    187.2,   220.2,  0.0,   2.2],
+    [5,3,   -138.7,  -122.9,  0.6,   0.4],
+    [5,4,   -142.0,    43.0,  2.2,   1.7],
+    [5,5,     20.9,   106.1,  0.9,   1.9],
+    [6,0,     64.4,     0.0, -0.2,   0.0],
+    [6,1,     63.8,   -18.4, -0.4,   0.3],
+    [6,2,     76.9,    16.8,  0.9,  -1.6],
+    [6,3,   -115.7,    48.8,  1.2,  -0.4],
+    [6,4,    -40.9,   -59.8, -0.9,   0.9],
+    [6,5,     14.9,    10.9,  0.3,   0.7],
+    [6,6,    -60.7,    72.7,  0.9,   0.9],
   ];
-  const H = [
-    [],                                          // n=0 (unused)
-    [      0,  4545.4,        0,       0],       // n=1: m=0,1
-    [      0, -3133.6,   -814.8,       0],       // n=2: m=0,1,2
-    [      0,    56.6,    237.4,  -549.1],       // n=3: m=0,1,2,3
-  ];
+
+  // Fractional year for secular variation
+  const now  = new Date();
+  const yr0  = Date.UTC(now.getUTCFullYear(), 0, 1);
+  const yr1  = Date.UTC(now.getUTCFullYear() + 1, 0, 1);
+  const dt   = (now.getUTCFullYear() + (now.getTime() - yr0) / (yr1 - yr0)) - 2025.0;
+
+  // Build G[n][m] / H[n][m] with secular variation applied
+  const NMAX = 6;
+  const G = Array.from({length: NMAX + 1}, () => new Float64Array(NMAX + 1));
+  const H = Array.from({length: NMAX + 1}, () => new Float64Array(NMAX + 1));
+  for (const [n, m, g, h, gd, hd] of WMM) {
+    G[n][m] = g + gd * dt;
+    H[n][m] = h + hd * dt;
+  }
 
   const lat  = latDeg * D2R;
   const lon  = lonDeg * D2R;
   const sinL = Math.sin(lat);
   const cosL = Math.cos(lat);
 
-  // Schmidt quasi-normal associated Legendre polynomials P(n,m,sinLat)
-  // and their latitude derivatives dP(n,m) = dP/d(latitude).
-  // Evaluated at sinLat = sin(geocentric lat).
-  // For surface approximation, geocentric ≈ geodetic (error < 0.2° at poles).
+  // Schmidt quasi-normal Legendre polynomials P[n][m](sinLat) and latitude
+  // derivatives dP[n][m] = dP/d(lat), computed via standard two-term recursion.
+  const P  = Array.from({length: NMAX + 1}, () => new Float64Array(NMAX + 1));
+  const dP = Array.from({length: NMAX + 1}, () => new Float64Array(NMAX + 1));
+  P[0][0]  = 1.0;
+  P[1][0]  = sinL;  dP[1][0] = cosL;
+  P[1][1]  = cosL;  dP[1][1] = -sinL;
+  for (let n = 2; n <= NMAX; n++) {
+    // Diagonal term: P[n][n] = √((2n-1)/(2n)) * cosL * P[n-1][n-1]
+    const fd  = Math.sqrt((2.0 * n - 1.0) / (2.0 * n));
+    P[n][n]   = fd * cosL * P[n-1][n-1];
+    dP[n][n]  = fd * (-sinL * P[n-1][n-1] + cosL * dP[n-1][n-1]);
+    // Off-diagonal terms (m = 0 to n-1)
+    for (let m = 0; m <= n - 1; m++) {
+      const nm2 = n * n - m * m;
+      const a   = (2 * n - 1) / Math.sqrt(nm2);
+      const b   = Math.sqrt(((n - 1) * (n - 1) - m * m) / nm2);
+      P[n][m]   = a * sinL * P[n-1][m]  - b * P[n-2][m];
+      dP[n][m]  = a * (cosL * P[n-1][m] + sinL * dP[n-1][m]) - b * dP[n-2][m];
+    }
+  }
 
-  // Pre-compute P and dP through n=3 using standard recursion
-  const P  = [[1,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
-  const dP = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
-  P[0][0]  = 1;
-  P[1][0]  = sinL;     dP[1][0] = cosL;
-  P[1][1]  = cosL;     dP[1][1] = -sinL;
-  P[2][0]  = 0.5 * (3*sinL*sinL - 1);                    dP[2][0] = 3*sinL*cosL;
-  P[2][1]  = Math.sqrt(3) * sinL * cosL;                  dP[2][1] = Math.sqrt(3) * (cosL*cosL - sinL*sinL);
-  P[2][2]  = Math.sqrt(3)/2 * cosL*cosL;                  dP[2][2] = -Math.sqrt(3) * sinL * cosL;
-  P[3][0]  = 0.5 * sinL * (5*sinL*sinL - 3);              dP[3][0] = 0.5*(15*sinL*sinL - 3)*cosL;
-  P[3][1]  = Math.sqrt(6)/4 * cosL * (5*sinL*sinL - 1);  dP[3][1] = Math.sqrt(6)/4 * (-sinL*(5*sinL*sinL-1) + 10*sinL*cosL*cosL);
-  P[3][2]  = Math.sqrt(15)/2 * sinL * cosL*cosL;          dP[3][2] = Math.sqrt(15)/2 * (cosL*cosL*cosL - 2*sinL*sinL*cosL);
-  P[3][3]  = Math.sqrt(10)/4 * cosL*cosL*cosL;            dP[3][3] = -3*Math.sqrt(10)/4 * sinL*cosL*cosL;
-
-  let Bx = 0, By = 0; // north (+Bx), east (+By) field components
-
-  for (let n = 1; n <= 3; n++) {
-    // At Earth's surface (r=a), the (a/r)^(n+2) factor equals 1 for all n.
+  // Accumulate north (Bx) and east (By) field components.
+  // At Earth's surface (r=a), (a/r)^(n+2) = 1 for all n.
+  // X = −(dP/dLat)·(g·cosML + h·sinML)
+  // Y = −m·P·(−g·sinML + h·cosML) / cosLat
+  let Bx = 0, By = 0;
+  for (let n = 1; n <= NMAX; n++) {
     for (let m = 0; m <= n; m++) {
-      const gnm = G[n][m] || 0;
-      const hnm = H[n][m] || 0;
+      const gnm  = G[n][m];
+      const hnm  = H[n][m];
       const cosM = Math.cos(m * lon);
       const sinM = Math.sin(m * lon);
-      // North component: X = (1/r) dV/d(lat) = -dP/d(lat) * (g cos + h sin)
-      // dP here is d/d(latitude), so Bx -= dP * (g cos + h sin)
       Bx -= dP[n][m] * (gnm * cosM + hnm * sinM);
-      // East component: Y = -(1/(r cosLat)) dV/dlon → -m * P * (-g sin + h cos) / cosLat
       if (cosL > 1e-6) {
         By -= m * P[n][m] * (-gnm * sinM + hnm * cosM) / cosL;
       }
