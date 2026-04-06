@@ -373,8 +373,9 @@ function resetPatternLegs() {
   state.legCustomPerf = Object.fromEntries(LEG_DEFS.map(l => [l.key, false]));
 
   // Reset heading to auto-compute from wind
-  state.manualHeading  = false;
-  state.finalHeadingDeg = null;
+  state.manualHeading   = false;
+  state.finalHeadingDeg = state.surfaceWind?.dirDeg ?? null;
+  if (state.finalHeadingDeg !== null) updateHeadingDisplay(state.finalHeadingDeg);
 
   renderLegs();
   // Collapse all expandable sections and explicitly reset checkbox/visibility state
