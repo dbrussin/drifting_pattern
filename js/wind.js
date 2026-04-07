@@ -457,7 +457,7 @@ async function fetchMetar(lat, lng) {
       .map(f => ({ f, dist: _metarDistMi(lat, lng, f.geometry.coordinates[1], f.geometry.coordinates[0]) }))
       .sort((a, b) => a.dist - b.dist);
     const nearest = withDist[0];
-    if (nearest.dist > 1.0) { box.style.display = 'none'; return; }
+    if (nearest.dist > 5.0) { box.style.display = 'none'; return; }
 
     const stId   = nearest.f.properties.stationIdentifier;
     const stName = nearest.f.properties.name;
