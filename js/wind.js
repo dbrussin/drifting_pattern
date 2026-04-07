@@ -455,8 +455,11 @@ async function fetchMetar(lat, lng) {
   const box = document.getElementById('metar-box');
   if (!box) return;
   try {
-    // radius=1 nm ≈ 1.15 statute miles; we'll then enforce the 1 statute mile cutoff below
-    const url = `https://aviationweather.gov/api/data/metar?lat=${lat}&lon=${lng}&radius=1&format=json&hours=2`;
+    // bbox: south,west,north,east — ~1.7 mi buffer each direction, then enforce ≤1 mi client-side
+    const d    = 0.025;
+    const dLon = d / Math.cos(lat * Math.PI / 180);
+    const bbox = `${(lat - d).toFixed(4)},${(lng - dLon).toFixed(4)},${(lat + d).toFixed(4)},${(lng + dLon).toFixed(4)}`;
+    const url  = `https://aviationweather.gov/api/data/metar?bbox=${bbox}&format=json&hours=2&mostRecentForEachStation=true`;
     const data = await (await fetch(url)).json();
     if (!Array.isArray(data) || !data.length) { box.style.display = 'none'; return; }
 
