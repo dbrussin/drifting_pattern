@@ -267,12 +267,18 @@ function calculate() {
   const dwHdg1     = p1dw.hdg;
 
   // Pass-1 turns (determine altitude consumed at each turn boundary)
+  // When a heading override is active on base or downwind the heading is arbitrary,
+  // so forcing the pattern-hand turn direction can produce > 180° arcs that cross
+  // over themselves.  Use shortest-path (sign = 0) for any turn that involves an
+  // overridden leg.
   const avgCSpdBF   = (perfB.cSpd  + perfF.cSpd)  / 2;
   const avgGlideBF  = (perfB.glide + perfF.glide)  / 2;
   const avgCSpdDB   = (perfDW.cSpd + perfB.cSpd)   / 2;
   const avgGlideDB  = (perfDW.glide + perfB.glide)  / 2;
-  const turn1BF = calcTurn(bHdg1, fHdgActual1, altF, avgCSpdBF, avgGlideBF, patternSign);
-  const turn1DB = calcTurn(dwHdg1, bHdg1,      altB, avgCSpdDB, avgGlideDB, state.zPattern ? 0 : patternSign);
+  const bfSign = bOverride != null ? 0 : patternSign;
+  const dbSign = (dwOverride != null || bOverride != null || state.zPattern) ? 0 : patternSign;
+  const turn1BF = calcTurn(bHdg1, fHdgActual1, altF, avgCSpdBF, avgGlideBF, bfSign);
+  const turn1DB = calcTurn(dwHdg1, bHdg1,      altB, avgCSpdDB, avgGlideDB, dbSign);
 
   // ── Pass 2: adjusted altitudes ────────────────────────────────────────────────
   // Altitude consumed by each turn reduces the starting altitude of the following leg.
@@ -348,8 +354,8 @@ function calculate() {
   }
 
   // ── Pass-2 turns (with adjusted headings) ─────────────────────────────────────
-  const turnBF = calcTurn(bHdg, fHdgActual, altF, avgCSpdBF, avgGlideBF, patternSign);
-  const turnDB = calcTurn(dwHdg, bHdg,      altB, avgCSpdDB, avgGlideDB, state.zPattern ? 0 : patternSign);
+  const turnBF = calcTurn(bHdg, fHdgActual, altF, avgCSpdBF, avgGlideBF, bfSign);
+  const turnDB = calcTurn(dwHdg, bHdg,      altB, avgCSpdDB, avgGlideDB, dbSign);
 
   // ── Backward position chain ───────────────────────────────────────────────────
   // tFinal = where final leg begins (after B→F turn); tBase = where base begins (after DW→B turn).
@@ -418,18 +424,26 @@ function calculate() {
         return { hdg: hdg_, disp: disp_, tSec: Math.round(tXL_ * 60), w: wXL_, still: still_ };
       }
 
-      // Solve heading and displacement for full altitude band [topAlt, xl.alt].
-      // The turn from this leg to the lower leg BEGINS at topAlt — matching the
-      // no-extra-leg model where the "turn to downwind" is zero degrees starting
-      // at altE.  No altitude is stolen from this leg's band for the turn.
-      const p1     = solveXL(topAlt);
-      const xlHdg  = p1.hdg;
-      const xlDisp = p1.disp;
-      const wXL    = p1.w;
+      // Two-pass approach — mirrors the standard altBstart/altFstart model:
+      //   Pass 1: solve the full altitude band to get the exit-turn heading,
+      //           then compute how much altitude the turn consumes.
+      //   Pass 2: subtract that altitude from the bottom of the straight-leg
+      //           band so the turn fits inside the leg's altitude range rather
+      //           than eating into the leg below.
+      // Turn direction is always shortest-path (sign = 0): extra-leg headings are
+      // user-specified and arbitrary, so forcing R/L can produce > 180° arcs.
+      const p1       = solveXL(topAlt);
+      const turn1XL  = calcTurn(p1.hdg, lowerHdg, topAlt, avgCSpd, avgGlide, 0);
 
-      // Turn direction: shortest path (patternSign = 0), not forced by pattern hand.
-      // Extra legs have arbitrary headings; forcing R/L can produce > 180° arcs
-      // that cross over themselves.  Shortest path guarantees |dh| ≤ 180°.
+      // altBotStraight: bottom of the straight-leg portion; capped so the band
+      // never collapses to less than 50 ft.
+      const altBotStraight = Math.min(xl.alt - 50, topAlt + turn1XL.altConsumed);
+
+      const p2     = solveXL(altBotStraight);
+      const xlHdg  = p2.hdg;
+      const xlDisp = p2.disp;
+      const wXL    = p2.w;
+
       const turnXL = calcTurn(xlHdg, lowerHdg, topAlt, avgCSpd, avgGlide, 0);
 
       // xl.exitTurnStart = where this leg's straight flight ends (turn begins)
@@ -458,10 +472,10 @@ function calculate() {
         altTop:        xl.alt,
         altBot:        topAlt,
         color:         xl.color,
-        tSec:          p1.tSec,
+        tSec:          p2.tSec,
         turnTSec:      Math.round(turnXL.tSec),
         wc:            { along: safeWC(wXL, xlTrackUnit), cross: safeWC(wXL, xlCrossVec) },
-        steered:       offsetLL(xlEntry.lat, xlEntry.lng, hdgVec(xlHdg).n * p1.still, hdgVec(xlHdg).e * p1.still),
+        steered:       offsetLL(xlEntry.lat, xlEntry.lng, hdgVec(xlHdg).n * p2.still, hdgVec(xlHdg).e * p2.still),
       });
 
       topPoint = xlEntry;
