@@ -165,12 +165,11 @@ function calculate() {
   // heading by dh*f with accumulated wind drift w*(f*tSec/60)*FT_PER_NM.
   function calcTurn(h1, h2, altAGL, cSpd, glide, patternSign = 0) {
     let dh = ((h2 - h1 + 540) % 360) - 180;            // signed shortest path (°)
-    // Always force the turn to go in the pattern-hand direction.
-    // Without this, extra legs with user-specified headings can produce arcs that go
-    // the wrong way (shortest path ≠ pattern direction), causing turn paths to cross
-    // over themselves and the backward position chain to place leg entry points wildly.
-    // Standard-leg headings are computed to already agree with patternSign, so this
-    // only changes behaviour for extra-leg turns with a naturally wrong-direction arc.
+    // For standard pattern legs (patternSign ≠ 0), force the turn to go in the
+    // pattern-hand direction.  Standard-leg headings are already designed so that
+    // the shortest path agrees with patternSign; this just enforces consistency.
+    // Extra-leg turns pass patternSign = 0 to use shortest path: their headings
+    // are arbitrary, and forcing R/L can produce > 180° arcs that cross themselves.
     if (patternSign !== 0) {
       if (patternSign > 0 && dh < 0) dh += 360;  // right-hand pattern → right turn
       if (patternSign < 0 && dh > 0) dh -= 360;  // left-hand pattern  → left turn
@@ -419,22 +418,19 @@ function calculate() {
         return { hdg: hdg_, disp: disp_, tSec: Math.round(tXL_ * 60), w: wXL_, still: still_ };
       }
 
-      // Pass 1: full altitude band → compute turn to find altitude consumed
+      // Solve heading and displacement for full altitude band [topAlt, xl.alt].
+      // The turn from this leg to the lower leg BEGINS at topAlt — matching the
+      // no-extra-leg model where the "turn to downwind" is zero degrees starting
+      // at altE.  No altitude is stolen from this leg's band for the turn.
       const p1     = solveXL(topAlt);
-      const turn1  = calcTurn(p1.hdg, lowerHdg, topAlt, avgCSpd, avgGlide, patternSign);
+      const xlHdg  = p1.hdg;
+      const xlDisp = p1.disp;
+      const wXL    = p1.w;
 
-      // The turn happens at topAlt; its altitude is consumed from ABOVE topAlt,
-      // within this leg's band — mirrors how altBstart/altFstart work for standard legs.
-      const altBotStraight = Math.min(xl.alt - 50, topAlt + turn1.altConsumed);
-
-      // Pass 2: reduced straight-leg band [altBotStraight, xl.alt]
-      const p2     = solveXL(altBotStraight);
-      const xlHdg  = p2.hdg;
-      const xlDisp = p2.disp;
-      const wXL    = p2.w;
-
-      // Final turn with pass-2 heading
-      const turnXL = calcTurn(xlHdg, lowerHdg, topAlt, avgCSpd, avgGlide, patternSign);
+      // Turn direction: shortest path (patternSign = 0), not forced by pattern hand.
+      // Extra legs have arbitrary headings; forcing R/L can produce > 180° arcs
+      // that cross over themselves.  Shortest path guarantees |dh| ≤ 180°.
+      const turnXL = calcTurn(xlHdg, lowerHdg, topAlt, avgCSpd, avgGlide, 0);
 
       // xl.exitTurnStart = where this leg's straight flight ends (turn begins)
       // xl.exit          = where the lower leg begins (after the turn)
