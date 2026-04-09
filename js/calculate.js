@@ -163,8 +163,13 @@ function calculate() {
   // geometry parameters for rendering the actual curved ground path in draw.js.
   // Arc: center is R ft perpendicular to h1; each point at fraction f sweeps
   // heading by dh*f with accumulated wind drift w*(f*tSec/60)*FT_PER_NM.
-  function calcTurn(h1, h2, altAGL, cSpd, glide) {
-    const dh    = ((h2 - h1 + 540) % 360) - 180;      // signed shortest path (°)
+  function calcTurn(h1, h2, altAGL, cSpd, glide, patternSign = 0) {
+    let dh = ((h2 - h1 + 540) % 360) - 180;            // signed shortest path (°)
+    // Near ±180°: the shortest-arc formula is discontinuous — a tiny heading change
+    // can flip a 179° right turn to a 179° left turn (or vice versa), causing the arc
+    // to jump to the opposite side and the leg entry point to move dramatically.
+    // When the turn is within 10° of a full reversal, force the pattern-hand direction.
+    if (patternSign !== 0 && Math.abs(dh) > 170 && patternSign * dh < 0) dh = -dh;
     const dhRad = Math.abs(dh) * D2R;
     const w     = getWindAtAGL(altAGL);
     if (dhRad < 0.001) return {dN: 0, dE: 0, tSec: 0, altConsumed: 0, R: 0, h1, h2, dh: 0, sign: 1, w};
@@ -212,6 +217,10 @@ function calculate() {
     }
   }
 
+  // Sign convention: +1 = right-hand pattern (right turns), -1 = left-hand (left turns).
+  // Used by calcTurn to break the ±180° shortest-arc ambiguity consistently.
+  const patternSign = state.hand === 'right' ? 1 : -1;
+
   // ── Pass 1: headings at nominal altitudes ─────────────────────────────────────
   // Final leg
   const fVec1      = hdgVec(fHdg);
@@ -258,8 +267,8 @@ function calculate() {
   const avgGlideBF  = (perfB.glide + perfF.glide)  / 2;
   const avgCSpdDB   = (perfDW.cSpd + perfB.cSpd)   / 2;
   const avgGlideDB  = (perfDW.glide + perfB.glide)  / 2;
-  const turn1BF = calcTurn(bHdg1, fHdgActual1, altF, avgCSpdBF, avgGlideBF);
-  const turn1DB = calcTurn(dwHdg1, bHdg1,      altB, avgCSpdDB, avgGlideDB);
+  const turn1BF = calcTurn(bHdg1, fHdgActual1, altF, avgCSpdBF, avgGlideBF, patternSign);
+  const turn1DB = calcTurn(dwHdg1, bHdg1,      altB, avgCSpdDB, avgGlideDB, patternSign);
 
   // ── Pass 2: adjusted altitudes ────────────────────────────────────────────────
   // Altitude consumed by each turn reduces the starting altitude of the following leg.
@@ -335,8 +344,8 @@ function calculate() {
   }
 
   // ── Pass-2 turns (with adjusted headings) ─────────────────────────────────────
-  const turnBF = calcTurn(bHdg, fHdgActual, altF, avgCSpdBF, avgGlideBF);
-  const turnDB = calcTurn(dwHdg, bHdg,      altB, avgCSpdDB, avgGlideDB);
+  const turnBF = calcTurn(bHdg, fHdgActual, altF, avgCSpdBF, avgGlideBF, patternSign);
+  const turnDB = calcTurn(dwHdg, bHdg,      altB, avgCSpdDB, avgGlideDB, patternSign);
 
   // ── Backward position chain ───────────────────────────────────────────────────
   // tFinal = where final leg begins (after B→F turn); tBase = where base begins (after DW→B turn).
@@ -365,42 +374,62 @@ function calculate() {
     extrasSorted.forEach((xl, i) => {
       if (xl.alt <= topAlt) return; // altitude must be above current top
 
-      const xlPerf   = getLegPerf(xl.id);
-      const dRateXL  = (xlPerf.cSpd / xlPerf.glide) * FT_MIN_PER_KT;
-      const tXL      = (xl.alt - topAlt) / (dRateXL * tasFactor((xl.alt + topAlt) / 2));
-      const wXL      = avgWindVec(topAlt, xl.alt);
-      const driftXLN = wXL.n * (tXL / 60) * FT_PER_NM;
-      const driftXLE = wXL.e * (tXL / 60) * FT_PER_NM;
+      const xlPerf  = getLegPerf(xl.id);
+      const dRateXL = (xlPerf.cSpd / xlPerf.glide) * FT_MIN_PER_KT;
+      const xlMode  = state.legModes[xl.id] || 'crab';
 
       // Approach heading is user-specified via the per-leg heading input
       const nomHdg = ((parseFloat(document.getElementById(`hdg-${xl.id}`)?.value) || 0) + 3600) % 360;
 
-      const xStillFt = (xl.alt - topAlt) * xlPerf.glide;
-      let xlHdg, xlDisp;
-      const xlMode = state.legModes[xl.id] || 'crab';
+      // lowerHdg: heading of the leg immediately below this one (DW or previous extra leg).
+      const lowerHdg  = i === 0 ? dwHdg : extraLegResults[extraLegResults.length - 1].hdg;
+      const lowerPerf = i === 0 ? perfDW : getLegPerf(extrasSorted[i - 1].id);
+      const avgCSpd   = (xlPerf.cSpd + lowerPerf.cSpd) / 2;
+      const avgGlide  = (xlPerf.glide + lowerPerf.glide) / 2;
 
-      if (xlMode === 'crab') {
-        const tN = hdgVec(nomHdg).n, tE = hdgVec(nomHdg).e;
-        const b1 = -2 * (tN * driftXLN + tE * driftXLE);
-        const c1 = driftXLN ** 2 + driftXLE ** 2 - xStillFt ** 2;
-        const d1 = b1 ** 2 - 4 * c1;
-        if (d1 < 0) console.warn(`calculate: extra leg ${xl.id} crab discriminant < 0 — using still-air fallback`);
-        const k1 = d1 >= 0 ? (-b1 + Math.sqrt(d1)) / 2 : xStillFt;
-        const rN = tN * k1 - driftXLN, rE = tE * k1 - driftXLE;
-        xlHdg  = (Math.atan2(rE, rN) * R2D + 360) % 360;
-        xlDisp = { dN: rN + driftXLN, dE: rE + driftXLE };
-      } else {
-        xlHdg  = nomHdg;
-        xlDisp = { dN: hdgVec(xlHdg).n * xStillFt + driftXLN, dE: hdgVec(xlHdg).e * xStillFt + driftXLE };
+      // Solve heading and displacement for a straight-leg band [altBot, xl.alt].
+      // The turn altitude consumed must be SUBTRACTED from the straight band (two-pass),
+      // so that the turn happens within this leg's altitude range, not below it.
+      function solveXL(altBot) {
+        const tXL_    = (xl.alt - altBot) / (dRateXL * tasFactor((xl.alt + altBot) / 2));
+        const wXL_    = avgWindVec(altBot, xl.alt);
+        const dN_     = wXL_.n * (tXL_ / 60) * FT_PER_NM;
+        const dE_     = wXL_.e * (tXL_ / 60) * FT_PER_NM;
+        const still_  = (xl.alt - altBot) * xlPerf.glide;
+        let hdg_, disp_;
+        if (xlMode === 'crab') {
+          const tN = hdgVec(nomHdg).n, tE = hdgVec(nomHdg).e;
+          const b  = -2 * (tN * dN_ + tE * dE_);
+          const c  = dN_ ** 2 + dE_ ** 2 - still_ ** 2;
+          const d  = b ** 2 - 4 * c;
+          if (d < 0) console.warn(`calculate: extra leg ${xl.id} crab discriminant < 0 — using still-air fallback`);
+          const k  = d >= 0 ? (-b + Math.sqrt(d)) / 2 : still_;
+          const rN = tN * k - dN_, rE = tE * k - dE_;
+          hdg_  = (Math.atan2(rE, rN) * R2D + 360) % 360;
+          disp_ = { dN: rN + dN_, dE: rE + dE_ };
+        } else {
+          hdg_  = nomHdg;
+          disp_ = { dN: hdgVec(nomHdg).n * still_ + dN_, dE: hdgVec(nomHdg).e * still_ + dE_ };
+        }
+        return { hdg: hdg_, disp: disp_, tSec: Math.round(tXL_ * 60), w: wXL_, still: still_ };
       }
 
-      // Turn from this extra leg heading to the lower leg heading, at topAlt.
-      // lowerHdg: heading of the leg immediately below this one (DW or previous extra leg).
-      const lowerHdg   = i === 0 ? dwHdg : extraLegResults[extraLegResults.length - 1].hdg;
-      const lowerPerf  = i === 0 ? perfDW : getLegPerf(extrasSorted[i - 1].id);
-      const turnXL = calcTurn(xlHdg, lowerHdg, topAlt,
-        (xlPerf.cSpd + lowerPerf.cSpd) / 2,
-        (xlPerf.glide + lowerPerf.glide) / 2);
+      // Pass 1: full altitude band → compute turn to find altitude consumed
+      const p1     = solveXL(topAlt);
+      const turn1  = calcTurn(p1.hdg, lowerHdg, topAlt, avgCSpd, avgGlide, patternSign);
+
+      // The turn happens at topAlt; its altitude is consumed from ABOVE topAlt,
+      // within this leg's band — mirrors how altBstart/altFstart work for standard legs.
+      const altBotStraight = Math.min(xl.alt - 50, topAlt + turn1.altConsumed);
+
+      // Pass 2: reduced straight-leg band [altBotStraight, xl.alt]
+      const p2     = solveXL(altBotStraight);
+      const xlHdg  = p2.hdg;
+      const xlDisp = p2.disp;
+      const wXL    = p2.w;
+
+      // Final turn with pass-2 heading
+      const turnXL = calcTurn(xlHdg, lowerHdg, topAlt, avgCSpd, avgGlide, patternSign);
 
       // xl.exitTurnStart = where this leg's straight flight ends (turn begins)
       // xl.exit          = where the lower leg begins (after the turn)
@@ -428,10 +457,10 @@ function calculate() {
         altTop:        xl.alt,
         altBot:        topAlt,
         color:         xl.color,
-        tSec:          Math.round(tXL * 60),
+        tSec:          p2.tSec,
         turnTSec:      Math.round(turnXL.tSec),
         wc:            { along: safeWC(wXL, xlTrackUnit), cross: safeWC(wXL, xlCrossVec) },
-        steered:       offsetLL(xlEntry.lat, xlEntry.lng, hdgVec(xlHdg).n * xStillFt, hdgVec(xlHdg).e * xStillFt),
+        steered:       offsetLL(xlEntry.lat, xlEntry.lng, hdgVec(xlHdg).n * p2.still, hdgVec(xlHdg).e * p2.still),
       });
 
       topPoint = xlEntry;
