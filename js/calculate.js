@@ -140,22 +140,24 @@ function calculate() {
 
   // ── Turn displacement helper ──────────────────────────────────────────────────
   // Models a coordinated banked turn from heading h1 to h2 at altAGL.
-  // Returns geographic displacement (ft), turn time (s), and altitude consumed (ft).
-  // Uses arc-chord geometry: chord = 2R·sin(|Δh|/2) in direction of average heading.
-  // Altitude consumed = banked descent rate × turn time (increased by 1/cos(bank)).
+  // Returns displacement (ft), turn time (s), altitude consumed (ft), and arc
+  // geometry parameters for rendering the actual curved ground path in draw.js.
+  // Arc: center is R ft perpendicular to h1; each point at fraction f sweeps
+  // heading by dh*f with accumulated wind drift w*(f*tSec/60)*FT_PER_NM.
   function calcTurn(h1, h2, altAGL, cSpd, glide) {
     const dh    = ((h2 - h1 + 540) % 360) - 180;      // signed shortest path (°)
     const dhRad = Math.abs(dh) * D2R;
-    if (dhRad < 0.001) return {dN: 0, dE: 0, tSec: 0, altConsumed: 0};
+    const w     = getWindAtAGL(altAGL);
+    if (dhRad < 0.001) return {dN: 0, dE: 0, tSec: 0, altConsumed: 0, R: 0, h1, h2, dh: 0, sign: 1, w};
     const tas    = cSpd * tasFactor(altAGL);            // TAS (kts)
     const v_ft_s = tas * FT_MIN_PER_KT / 60;           // TAS (ft/s)
     const omega  = G_FT_S2 * Math.tan(bankRad) / v_ft_s; // turn rate (rad/s)
     const R      = v_ft_s / omega;                      // turn radius (ft)
     const tSec   = dhRad / omega;                       // turn time (s)
+    const sign   = dh > 0 ? 1 : -1;                    // +1 = right turn, -1 = left
     const hAvg   = (h1 + dh / 2 + 360) % 360;         // avg heading during arc
     const hv     = hdgVec(hAvg);
-    const chord  = 2 * R * Math.sin(dhRad / 2);        // arc chord (ft)
-    const w      = getWindAtAGL(altAGL);
+    const chord  = 2 * R * Math.sin(dhRad / 2);        // arc chord length (ft)
     const tMin   = tSec / 60;
     // Descent rate in banked turn (TAS-adjusted, increased by 1/cos(bank))
     const dRateTurn = (cSpd / glide) * FT_MIN_PER_KT * tasFactor(altAGL) / Math.cos(bankRad);
@@ -164,6 +166,7 @@ function calculate() {
       dE:          hv.e * chord + w.e * (tMin / 60) * FT_PER_NM,
       tSec,
       altConsumed: dRateTurn * tMin,
+      R, h1, h2, dh, sign, w,   // arc geometry for draw.js
     };
   }
 
@@ -397,6 +400,7 @@ function calculate() {
         entry:         xlEntry,         // top of leg (far from landing, entered first)
         exit:          xlExit,          // bottom of leg = start of lower leg (post-turn)
         exitTurnStart: xlExitTurnStart, // where straight flight ends and turn begins
+        turnInfo:      turnXL,          // arc geometry for draw.js
         disp:          xlDisp,
         hdg:           xlHdg,
         nomHdg,

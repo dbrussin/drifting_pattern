@@ -105,14 +105,35 @@ function drawPattern() {
     });
   }
 
+  // Build a polyline point array for a curved banked-turn arc.
+  // Arc sweeps from turnStart by dh° around a center R ft perpendicular to h1,
+  // with accumulated wind drift w at each fraction f along the arc.
+  function turnArcPoints(turnStart, turn) {
+    const {h1, dh, sign, R, w, tSec} = turn;
+    if (!R || !tSec) return [ll(turnStart)];
+    const steps = Math.max(8, Math.ceil(Math.abs(dh) / 8));
+    const c1 = hdgVec((h1 + sign * 90 + 360) % 360);   // center direction from turnStart
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const f   = i / steps;
+      const c2  = hdgVec((h1 + dh * f - sign * 90 + 360) % 360); // center→canopy at fraction f
+      const arcN = R * c1.n + R * c2.n;
+      const arcE = R * c1.e + R * c2.e;
+      const wN   = w.n * (f * tSec / 3600) * FT_PER_NM;  // wind drift (ft)
+      const wE   = w.e * (f * tSec / 3600) * FT_PER_NM;
+      pts.push(ll(offsetLL(turnStart.lat, turnStart.lng, arcN + wN, arcE + wE)));
+    }
+    return pts;
+  }
+
   // Ground track lines (solid, ending at turn-start points)
   addL(L.polyline([ll(entry),          ll(tBaseTurnStart)],  {color: '#f4944d', weight: 3, opacity: 0.9}));
   addL(L.polyline([ll(tBase),          ll(tFinalTurnStart)], {color: '#4df4c8', weight: 3, opacity: 0.9}));
   addL(L.polyline([ll(tFinal),         ll(landing)],         {color: '#e8f44d', weight: 3, opacity: 0.95}));
 
-  // Turn arc segments (solid, colored to match the following leg)
-  addL(L.polyline([ll(tBaseTurnStart), ll(tBase)],           {color: '#4df4c8', weight: 3, opacity: 0.9}));
-  addL(L.polyline([ll(tFinalTurnStart),ll(tFinal)],          {color: '#e8f44d', weight: 3, opacity: 0.95}));
+  // Turn arcs (actual curved path, colored to match the following leg)
+  addL(L.polyline(turnArcPoints(tBaseTurnStart,  p.turnDB), {color: '#4df4c8', weight: 3, opacity: 0.9}));
+  addL(L.polyline(turnArcPoints(tFinalTurnStart, p.turnBF), {color: '#e8f44d', weight: 3, opacity: 0.95}));
 
   // Steered heading lines (dashed, colored to match leg) when drift is significant
   if (dwDrift > DRIFT_THRESH) addL(L.polyline([ll(entry),  ll(dwSteered)], {color: 'rgba(244,148,77,0.6)',  weight: 2, dashArray: '6 4'}));
@@ -131,10 +152,13 @@ function drawPattern() {
   // Extra legs above downwind
   if (p.extraLegs?.length) {
     p.extraLegs.forEach(xl => {
-      // Straight portion + turn segment — turn colored to match the leg below (DW or next lower extra)
-      // For simplicity the turn arc uses the same extra leg color; the leg below handles its own color.
+      // Straight portion + turn arc — turn colored to match extra leg color
       addL(L.polyline([ll(xl.entry), ll(xl.exitTurnStart)], {color: xl.color, weight: 3, opacity: 0.9}));
-      addL(L.polyline([ll(xl.exitTurnStart), ll(xl.exit)],  {color: xl.color, weight: 3, opacity: 0.9}));
+      if (xl.turnInfo) {
+        addL(L.polyline(turnArcPoints(xl.exitTurnStart, xl.turnInfo), {color: xl.color, weight: 3, opacity: 0.9}));
+      } else {
+        addL(L.polyline([ll(xl.exitTurnStart), ll(xl.exit)], {color: xl.color, weight: 3, opacity: 0.9}));
+      }
       if (xl.drift > DRIFT_THRESH)
         addL(L.polyline([ll(xl.entry), ll(xl.steered)], {color: xl.color, weight: 2, opacity: 0.5, dashArray: '6 4'}));
       addL(L.marker(ll(xl.entry),         {icon: pinIcon(xl.color),       zIndexOffset: 100}));
