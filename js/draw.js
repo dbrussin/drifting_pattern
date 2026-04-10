@@ -434,13 +434,18 @@ function drawPattern() {
         letter-spacing:0.04em;pointer-events:none;">${txt}</div>`,
       iconSize: [100, 20], iconAnchor: [-6, 10], className: '',
     });
-    // altE: DW entry (no preceding turn — label at entry itself)
-    // altB/altF: turns begin at these altitudes, so label at the geographic turn-start point
-    addL(L.marker(ll(entry),           {icon: turnLabelIcon(`${p.altE}ft AGL`, '#f4944d'), interactive: false, zIndexOffset: 60}));
+    // Labels placed at the start of the turn arc that begins each leg's altitude band,
+    // matching altB/altF which are at tBaseTurnStart/tFinalTurnStart respectively.
+    // DW: if extra legs exist, the XL→DW arc starts at extraLegs[0].exitTurnStart; else entry.
+    // Extra legs: the arc entering leg[i] starts at extraLegs[i+1].exitTurnStart (if it exists).
+    const dwAltLabelPt = p.extraLegs?.length ? p.extraLegs[0].exitTurnStart : entry;
+    addL(L.marker(ll(dwAltLabelPt),    {icon: turnLabelIcon(`${p.altE}ft AGL`, '#f4944d'), interactive: false, zIndexOffset: 60}));
     addL(L.marker(ll(tBaseTurnStart),  {icon: turnLabelIcon(`${p.altB}ft AGL`, '#4df4c8'), interactive: false, zIndexOffset: 60}));
     addL(L.marker(ll(tFinalTurnStart), {icon: turnLabelIcon(`${p.altF}ft AGL`, '#e8f44d'), interactive: false, zIndexOffset: 60}));
-    p.extraLegs?.forEach(xl =>
-      addL(L.marker(ll(xl.entry), {icon: turnLabelIcon(`${xl.altTop}ft AGL`, xl.color), interactive: false, zIndexOffset: 60})));
+    p.extraLegs?.forEach((xl, xlIdx) => {
+      const labelPt = xlIdx < p.extraLegs.length - 1 ? p.extraLegs[xlIdx + 1].exitTurnStart : xl.entry;
+      addL(L.marker(ll(labelPt), {icon: turnLabelIcon(`${xl.altTop}ft AGL`, xl.color), interactive: false, zIndexOffset: 60}));
+    });
   }
 
   // ── Leg distance / wind / timing labels ──
