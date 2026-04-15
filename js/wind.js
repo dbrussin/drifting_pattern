@@ -153,12 +153,13 @@ function processWindData(d, fieldElevFt) {
   const rawTemp  = [];
 
   // Fixed-height-level winds (AGL → MSL), no temperature available
+  // Store unrounded values — rounding happens at display time only.
   const htAGLft = {80: 262, 120: 394, 180: 591};
   HEIGHT_LEVELS.forEach(hm => {
     const spd = d.hourly[`windspeed_${hm}m`]?.[hi];
     const dir = d.hourly[`winddirection_${hm}m`]?.[hi];
     if (spd != null && dir != null)
-      rawWinds.push({altFt: state.fieldElevFt + htAGLft[hm], dirDeg: Math.round(dir), speedKts: Math.round(spd)});
+      rawWinds.push({altFt: state.fieldElevFt + htAGLft[hm], dirDeg: dir, speedKts: spd});
   });
 
   // Pressure level winds + temperature at actual geopotential altitude
@@ -172,12 +173,12 @@ function processWindData(d, fieldElevFt) {
       const mslFt = geopotentialToFtMSL(hgt);
       const aglFt = mslFt - state.fieldElevFt;
       if (aglFt < MIN_AGL_FT) return; // below or at ground level, skip
-      rawWinds.push({altFt: mslFt, dirDeg: Math.round(dir), speedKts: Math.round(spd)});
+      rawWinds.push({altFt: mslFt, dirDeg: dir, speedKts: spd});
       if (tmp != null) rawTemp.push({altFt: mslFt, tempC: tmp});
       pressureRows.push({
         aglFt, altFt: aglFt, mslFt,
-        dirDeg: Math.round(dir), speedKts: Math.round(spd),
-        tempC: tmp !== null && tmp !== undefined ? Math.round(tmp * 10) / 10 : null,
+        dirDeg: dir, speedKts: spd,
+        tempC: tmp ?? null,
         real: true,
         label: `${Math.round(aglFt / 100) * 100 === aglFt ? aglFt.toLocaleString() : '~' + Math.round(aglFt / 100) * 100}ft`,
         source: `${p}hPa`,
@@ -187,7 +188,7 @@ function processWindData(d, fieldElevFt) {
   rawWinds.sort((a, b) => a.altFt - b.altFt);
   rawTemp.sort((a, b)  => a.altFt - b.altFt);
 
-  // Temperature interpolation helper
+  // Temperature interpolation helper — returns unrounded °C; display rounds.
   function interpTemp(mslFt) {
     if (!rawTemp.length) return null;
     if (mslFt <= rawTemp[0].altFt) return rawTemp[0].tempC;
@@ -196,7 +197,7 @@ function processWindData(d, fieldElevFt) {
       const lo = rawTemp[i], hi2 = rawTemp[i + 1];
       if (mslFt >= lo.altFt && mslFt <= hi2.altFt) {
         const t = (mslFt - lo.altFt) / (hi2.altFt - lo.altFt);
-        return Math.round((lo.tempC + t * (hi2.tempC - lo.tempC)) * 10) / 10;
+        return lo.tempC + t * (hi2.tempC - lo.tempC);
       }
     }
     return null;
@@ -213,7 +214,7 @@ function processWindData(d, fieldElevFt) {
     real: true, label: 'SFC', source: '10m',
   });
 
-  // Fixed height-level rows (262/394/591ft AGL)
+  // Fixed height-level rows (262/394/591ft AGL) — stored unrounded
   HEIGHT_LEVELS.forEach(hm => {
     const spd = d.hourly[`windspeed_${hm}m`]?.[hi];
     const dir = d.hourly[`winddirection_${hm}m`]?.[hi];
@@ -221,7 +222,7 @@ function processWindData(d, fieldElevFt) {
     if (spd != null && dir != null) {
       allRows.push({
         aglFt: agl, altFt: agl,
-        dirDeg: Math.round(dir), speedKts: Math.round(spd),
+        dirDeg: dir, speedKts: spd,
         tempC: interpTemp(state.fieldElevFt + agl),
         real: true, label: `${agl}ft`, source: `${hm}m AGL`,
       });
@@ -265,7 +266,7 @@ function processWindData(d, fieldElevFt) {
   });
 
   state.winds = allRows;
-  _sortedWindsCache = null; _sortedTempCache = null; // invalidate caches
+  invalidateWindCaches();
 
   buildWindTable();
   if (!state.manualHeading && state.surfaceWind.dirDeg != null) { state.finalHeadingDeg = state.surfaceWind.dirDeg; updateHeadingDisplay(state.surfaceWind.dirDeg); }
@@ -294,13 +295,13 @@ function buildWindTable() {
     const dirEl   = document.createElement('input');
     dirEl.type    = 'number'; dirEl.min = '0'; dirEl.max = '360'; dirEl.step = '1';
     dirEl.placeholder = '---';
-    if (w.dirDeg !== null) dirEl.value = w.dirDeg;
+    if (w.dirDeg != null) dirEl.value = Math.round(w.dirDeg);
     dirEl.addEventListener('change', () => updateWindByIdx(i, 'dirDeg', dirEl.value));
 
     const spdEl   = document.createElement('input');
     spdEl.type    = 'number'; spdEl.min = '0'; spdEl.max = '200'; spdEl.step = '1';
     spdEl.placeholder = '---';
-    if (w.speedKts !== null) spdEl.value = w.speedKts;
+    if (w.speedKts != null) spdEl.value = Math.round(w.speedKts);
     spdEl.addEventListener('change', () => updateWindByIdx(i, 'speedKts', spdEl.value));
 
     const tempEl = document.createElement('div');
@@ -316,7 +317,7 @@ function updateWindByIdx(i, field, val) {
   if (!state.winds[i]) return;
   const parsed = val === '' ? null : parseFloat(val);
   if (val !== '' && isNaN(parsed)) return; // reject non-numeric input
-  _sortedWindsCache = null; _sortedTempCache = null; // invalidate caches
+  invalidateWindCaches();
   state.winds[i][field] = parsed;
   if (state.winds[i].aglFt === 0) {
     if (!state.surfaceWind) state.surfaceWind = {dirDeg: null, speedKts: null};

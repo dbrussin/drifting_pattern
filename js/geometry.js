@@ -35,9 +35,10 @@ function distMiles(a, b) {
  * Linear interpolation of wind between two altitude levels.
  * Handles circular direction interpolation (shortest angular path through ±180°).
  * Clamps to nearest endpoint for altitudes outside the sorted array range.
+ * Returns unrounded values — callers that display to the user should round.
  * @param {Array<{altFt: number, dirDeg: number, speedKts: number}>} sorted - Wind levels sorted ascending by altFt
  * @param {number} targetAlt - MSL altitude to interpolate at (ft)
- * @returns {{dir: number, speed: number}} Interpolated wind direction (° true, rounded) and speed (kts, rounded)
+ * @returns {{dir: number, speed: number}} Interpolated wind direction (° true) and speed (kts)
  */
 function interpolateWind(sorted, targetAlt) {
   if (!sorted.length) return {dir: 0, speed: 0};
@@ -52,8 +53,8 @@ function interpolateWind(sorted, targetAlt) {
       if (dd > 180) dd -= 360;
       if (dd < -180) dd += 360;
       return {
-        dir:   Math.round((lo.dirDeg + t * dd + 360) % 360),
-        speed: Math.round(lo.speedKts + t * (hi.speedKts - lo.speedKts)),
+        dir:   ((lo.dirDeg + t * dd) % 360 + 360) % 360,
+        speed: lo.speedKts + t * (hi.speedKts - lo.speedKts),
       };
     }
   }
@@ -98,6 +99,12 @@ function getWindAtAGL(agl) {
 
 let _sortedTempCache  = null;
 let _sortedTempElevFt = null;
+
+// Call this whenever state.winds is mutated to invalidate both caches.
+function invalidateWindCaches() {
+  _sortedWindsCache = null;
+  _sortedTempCache  = null;
+}
 
 function getSortedTemps() {
   if (_sortedTempCache && _sortedTempElevFt === state.fieldElevFt) return _sortedTempCache;
@@ -236,16 +243,23 @@ function magDeclination(latDeg, lonDeg) {
  * Compute the TAS/IAS ratio at a given AGL altitude using the ISA atmosphere model.
  * Uses actual temperature from API data when available, falls back to ISA standard temp.
  * Reference: ICAO standard atmosphere — pressure ratio exponent 5.2561, lapse 6.5 K/km.
+ *
+ * Density ratio σ = (P/P₀)·(T₀/T_actual), where T₀ = 288.15 K is the sea-level
+ * standard temperature. At ISA this collapses to (1 − Lh/T₀)^(g/RL − 1).
+ * TAS/IAS = 1/√σ ≈ 1.015 per 1000 ft at ISA.
+ *
  * @param {number} agl - Altitude above ground level (ft)
- * @returns {number} TAS/IAS ratio (1.0 at field elevation, ~1.02 per 1000 ft at ISA)
+ * @returns {number} TAS/IAS ratio (1.0 at sea level, ~1.015 per 1000 ft at ISA)
  */
+const T_SL_K = 288.15; // sea-level standard temperature (K)
 function tasFactor(agl) {
   const mslFt = agl + state.fieldElevFt;
   if (mslFt <= 0) return 1;
   const tempC      = getTempAtAGL(agl);
-  const T_isa_K    = 288.15 - 0.001981 * mslFt;                        // ISA temp at MSL alt (K)
+  const T_isa_K    = T_SL_K - 0.001981 * mslFt;                        // ISA temp at MSL alt (K)
   const T_actual_K = tempC !== null ? tempC + 273.15 : T_isa_K;        // actual or ISA fallback
   const P_ratio    = Math.pow(Math.max(1 - 6.8756e-6 * mslFt, 0.01), 5.2561); // std atmosphere
-  const sigma      = P_ratio * (T_isa_K / Math.max(T_actual_K, 1));    // density ratio
+  // σ = (P/P₀)·(T₀/T) — must use SL standard temp, NOT T_isa at altitude.
+  const sigma      = P_ratio * (T_SL_K / Math.max(T_actual_K, 1));
   return 1 / Math.sqrt(Math.max(sigma, 0.1));
 }

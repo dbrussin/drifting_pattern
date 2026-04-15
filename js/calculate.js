@@ -28,34 +28,12 @@ function integratedDrift(altTopAGL, altBotAGL, descentFtMin) {
 }
 
 /**
- * Average wind speed and direction across an altitude band (used for zone labels).
- * Samples every 200 ft and returns a scalar average, not a vector average.
- * @param {number} altBotAGL - Bottom of band (ft AGL)
- * @param {number} altTopAGL - Top of band (ft AGL)
- * @returns {{spd: number, dir: number}} Average wind speed (kts, rounded) and direction (° true, rounded)
- */
-function avgWindInBand(altBotAGL, altTopAGL) {
-  let sumN = 0, sumE = 0, count = 0;
-  for (let agl = altBotAGL; agl < altTopAGL; agl += DRIFT_STEP_FT) {
-    const mid = (agl + Math.min(agl + DRIFT_STEP_FT, altTopAGL)) / 2;
-    const w   = getWindAtAGL(mid);
-    sumN += w.n; sumE += w.e; count++;
-  }
-  if (!count) return {spd: 0, dir: 0};
-  const avgN = sumN / count, avgE = sumE / count;
-  return {
-    spd: Math.round(Math.sqrt(avgN ** 2 + avgE ** 2)),
-    dir: Math.round((Math.atan2(avgE, avgN) * R2D + 360) % 360),
-  };
-}
-
-/**
  * Average wind vector {n, e} over an altitude band using 200 ft steps.
  * More accurate than a single midpoint sample for legs spanning large altitude ranges.
  * Used for straight-leg heading and displacement calculations in calculate().
  * @param {number} altBot - Bottom of band (ft AGL)
  * @param {number} altTop - Top of band (ft AGL)
- * @returns {{n: number, e: number}} Average wind vector (kts, north/east)
+ * @returns {{n: number, e: number}} Average wind vector (kts, north/east velocity)
  */
 function avgWindVec(altBot, altTop) {
   let sumN = 0, sumE = 0, count = 0;
@@ -66,6 +44,31 @@ function avgWindVec(altBot, altTop) {
   }
   if (!count) return getWindAtAGL((altBot + altTop) / 2);
   return {n: sumN / count, e: sumE / count};
+}
+
+/**
+ * Vector-mean wind across a band, returned in {spd, dir} form for zone labels.
+ * `dir` is the VELOCITY direction (where the wind blows toward, degrees true),
+ * NOT the conventional meteorological "from" direction. Callers that display
+ * a "from" arrow should add 180°.
+ * @param {number} altBotAGL - Bottom of band (ft AGL)
+ * @param {number} altTopAGL - Top of band (ft AGL)
+ * @returns {{spd: number, dir: number}} Vector-mean wind speed (kts, rounded)
+ *   and velocity direction (° true, rounded).
+ */
+function avgWindInBand(altBotAGL, altTopAGL) {
+  const w = avgWindVec(altBotAGL, altTopAGL);
+  return {
+    spd: Math.round(Math.sqrt(w.n ** 2 + w.e ** 2)),
+    dir: Math.round((Math.atan2(w.e, w.n) * R2D + 360) % 360),
+  };
+}
+
+// Project wind vector onto a unit vector; returns rounded scalar component (kts).
+// Positive = along unit vector direction (tailwind for track unit); negative = head.
+function safeWC(w, unitVec) {
+  if (!isFinite(w.n) || !isFinite(w.e)) return 0;
+  return Math.round(w.n * unitVec.n + w.e * unitVec.e);
 }
 
 // ── Main pattern solver ───────────────────────────────────────────────────────
@@ -109,6 +112,13 @@ function calculate() {
   if (altF < 100) { setStatus('Turn Final must be at least 100 ft AGL'); return; }
   if (altB < altF + 100) { setStatus('Turn Base must be at least 100 ft above Turn Final'); return; }
   if (altE < altB + 100) { setStatus('Enter altitude must be at least 100 ft above Turn Base'); return; }
+  // Upper-bound sanity (defense-in-depth; HTML min/max are the primary guard)
+  if (altE    > 10000) { setStatus('Pattern entry altitude unrealistic (>10,000 ft AGL)'); return; }
+  if (altExit > 25000) { setStatus('Exit altitude unrealistic (>25,000 ft AGL)');          return; }
+  if (altOpen > 10000) { setStatus('Opening altitude unrealistic (>10,000 ft AGL)');       return; }
+  if (altOpen < altF + 100) { setStatus('Opening altitude must be above pattern Final');   return; }
+  if (cSpd    <= 0 || cSpd > 60)  { setStatus('Canopy speed must be between 1 and 60 kts'); return; }
+  if (glide   <= 0 || glide > 10) { setStatus('Glide ratio must be between 0 and 10:1');    return; }
   if (state.extraLegs && state.extraLegs.length > 0) {
     const extraAlts = state.extraLegs
       .map(xl => ({ id: xl.id, alt: parseFloat(document.getElementById(`alt-${xl.id}`)?.value) || xl.defaultAlt }))
@@ -133,9 +143,12 @@ function calculate() {
   const fHdg = state.legHdgOverride?.f != null ? state.legHdgOverride.f : fHdgFromBar;
 
   // Jump run heading (needs fHdg as fallback for calm winds)
+  // Uses the MEAN wind vector across the opening-altitude → exit-altitude band
+  // rather than a single point sample at exit altitude, which better represents
+  // the spot drift relevant to the jump run.
   let jrHdg = state.jumpRunHdgDeg;
   if (jrHdg === null) {
-    const wExit      = getWindAtAGL(altExit);
+    const wExit       = avgWindVec(altOpen, altExit);
     const exitWindSpd = vecLen(wExit);
     if (exitWindSpd > MIN_WIND_SPD_KT) {
       const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
@@ -163,6 +176,13 @@ function calculate() {
   // geometry parameters for rendering the actual curved ground path in draw.js.
   // Arc: center is R ft perpendicular to h1; each point at fraction f sweeps
   // heading by dh*f with accumulated wind drift w*(f*tSec/60)*FT_PER_NM.
+  //
+  // Descent rate in a banked turn is approximated as IAS-sink × (1/cos θ),
+  // which assumes a constant glide ratio with load factor n = 1/cos θ. This
+  // is a first-order approximation — for ram-air canopies the empirical
+  // increase is somewhat steeper (closer to 1/cos²θ at steep banks) because
+  // induced drag rises with lift². For pattern-typical banks (20°–45°) the
+  // error is small.
   function calcTurn(h1, h2, altAGL, cSpd, glide, patternSign = 0) {
     let dh = ((h2 - h1 + 540) % 360) - 180;            // signed shortest path (°)
     // For standard pattern legs (patternSign ≠ 0), force the turn to go in the
@@ -175,39 +195,49 @@ function calculate() {
       if (patternSign < 0 && dh > 0) dh -= 360;  // left-hand pattern  → left turn
     }
     const dhRad = Math.abs(dh) * D2R;
-    const w     = getWindAtAGL(altAGL);
-    if (dhRad < 0.001) return {dN: 0, dE: 0, tSec: 0, altConsumed: 0, R: 0, h1, h2, dh: 0, sign: 1, w};
+    if (dhRad < 0.001) {
+      return {dN: 0, dE: 0, tSec: 0, altConsumed: 0, R: 0, h1, h2, dh: 0, sign: 1, w: getWindAtAGL(altAGL)};
+    }
     const tas    = cSpd * tasFactor(altAGL);            // TAS (kts)
-    const v_ft_s = tas * FT_MIN_PER_KT / 60;           // TAS (ft/s)
-    const omega  = G_FT_S2 * Math.tan(bankRad) / v_ft_s; // turn rate (rad/s)
+    const v_ft_s = tas * FT_MIN_PER_KT / 60;            // TAS (ft/s)
+    const omega  = G_FT_S2 * Math.tan(bankRad) / v_ft_s;// turn rate (rad/s)
     const R      = v_ft_s / omega;                      // turn radius (ft)
     const tSec   = dhRad / omega;                       // turn time (s)
-    const sign   = dh > 0 ? 1 : -1;                    // +1 = right turn, -1 = left
-    const hAvg   = (h1 + dh / 2 + 360) % 360;         // avg heading during arc
-    const hv     = hdgVec(hAvg);
-    const chord  = 2 * R * Math.sin(dhRad / 2);        // arc chord length (ft)
     const tMin   = tSec / 60;
-    // Descent rate in banked turn (TAS-adjusted, increased by 1/cos(bank))
+    const sign   = dh > 0 ? 1 : -1;                     // +1 = right turn, -1 = left
+    const hAvg   = (h1 + dh / 2 + 360) % 360;           // avg heading during arc
+    const hv     = hdgVec(hAvg);
+    const chord  = 2 * R * Math.sin(dhRad / 2);         // arc chord length (ft)
     const dRateTurn = (cSpd / glide) * FT_MIN_PER_KT * tasFactor(altAGL) / Math.cos(bankRad);
+    const altConsumed = dRateTurn * tMin;
+    // Sample wind at the MIDPOINT altitude of the turn, not the top. The turn
+    // happens from altAGL down to altAGL−altConsumed; midpoint is the best
+    // single representative sample of the wind the canopy experiences.
+    const altMid = Math.max(0, altAGL - altConsumed / 2);
+    const w      = getWindAtAGL(altMid);
     return {
       dN:          hv.n * chord + w.n * (tMin / 60) * FT_PER_NM,
       dE:          hv.e * chord + w.e * (tMin / 60) * FT_PER_NM,
       tSec,
-      altConsumed: dRateTurn * tMin,
+      altConsumed,
       R, h1, h2, dh, sign, w,   // arc geometry for draw.js
     };
   }
 
   // ── Leg heading solver (pure function, no side-effects) ───────────────────────
   // Solves crab or drift heading+displacement for a leg given track direction,
-  // still-air glide distance, wind, and time. Returns {hdg, disp}.
+  // still-air glide distance, wind, and time. Returns {hdg, disp} on success,
+  // or null when the crab quadratic has no real solution (crosswind component
+  // exceeds canopy airspeed — the leg is unflyable).
   function solveleg(mode, trackN, trackE, stillFt, w, tMin, nomHdg) {
     const driftN = w.n * (tMin / 60) * FT_PER_NM, driftE = w.e * (tMin / 60) * FT_PER_NM;
     if (mode === 'crab') {
       const bc = -2 * (trackN * driftN + trackE * driftE);
       const cc = driftN ** 2 + driftE ** 2 - stillFt ** 2;
       const bd = bc ** 2 - 4 * cc;
-      const k  = bd >= 0 ? (-bc + Math.sqrt(bd)) / 2 : stillFt;
+      if (bd < 0) return null;               // crosswind > canopy speed → unflyable
+      const k  = (-bc + Math.sqrt(bd)) / 2;
+      if (k <= 0) return null;               // degenerate (wind overpowers canopy)
       const rN = trackN * k - driftN, rE = trackE * k - driftE;
       return {
         hdg:  (Math.atan2(rE, rN) * R2D + 360) % 360,
@@ -225,137 +255,113 @@ function calculate() {
   // Used by calcTurn to break the ±180° shortest-arc ambiguity consistently.
   const patternSign = state.hand === 'right' ? 1 : -1;
 
-  // ── Pass 1: headings at nominal altitudes ─────────────────────────────────────
-  // Final leg
-  const fVec1      = hdgVec(fHdg);
-  const fStillFt1  = altF * perfF.glide;
-  const tF1        = altF / (dRateF * tasFactor(altF / 2));
-  const wF1        = avgWindVec(0, altF);
-  let   p1f, fHdgActual1;
-  if (state.legModes.f === 'crab') {
-    const r = solveleg('crab', fVec1.n, fVec1.e, fStillFt1, wF1, tF1, null);
-    fHdgActual1 = r.hdg; p1f = r.disp;
-  } else {
-    fHdgActual1 = fHdg;
-    p1f = {dN: fVec1.n * fStillFt1 + wF1.n * (tF1 / 60) * FT_PER_NM,
-           dE: fVec1.e * fStillFt1 + wF1.e * (tF1 / 60) * FT_PER_NM};
-  }
-  // We need fTrackUnit for base/DW direction — use pass-1 final disp
-  const fTrackUnit1 = normalize({n: p1f.dN, e: p1f.dE});
-
-  // Base leg at nominal altitudes
-  const bOverride  = state.legHdgOverride?.b;
-  const bTN1 = bOverride != null ? hdgVec(bOverride).n : (state.hand === 'left' ? -fTrackUnit1.e :  fTrackUnit1.e);
-  const bTE1 = bOverride != null ? hdgVec(bOverride).e : (state.hand === 'left' ?  fTrackUnit1.n : -fTrackUnit1.n);
-  const bStillFt1  = (altB - altF) * perfB.glide;
-  const tB1        = (altB - altF) / (dRateB * tasFactor((altB + altF) / 2));
-  const wB1        = avgWindVec(altF, altB);
-  const bNomHdg1   = bOverride ?? (state.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
-  const p1b        = solveleg(state.legModes.b, bTN1, bTE1, bStillFt1, wB1, tB1, bNomHdg1);
-  const bHdg1      = p1b.hdg;
-
-  // Downwind leg at nominal altitudes (heading only needed for pass-1 turns)
-  const dwOverride = state.legHdgOverride?.dw;
+  // Leg heading overrides + DW track sign (computed once; constant across iters)
+  const bOverride   = state.legHdgOverride?.b;
+  const dwOverride  = state.legHdgOverride?.dw;
   const dwTrackSign = state.zPattern ? 1 : -1;
-  const dwTN1 = dwOverride != null ? hdgVec(dwOverride).n : dwTrackSign * fTrackUnit1.n;
-  const dwTE1 = dwOverride != null ? hdgVec(dwOverride).e : dwTrackSign * fTrackUnit1.e;
-  const dStillFt1  = (altE - altB) * perfDW.glide;
-  const tD1        = (altE - altB) / (dRateDW * tasFactor((altE + altB) / 2));
-  const wD1        = avgWindVec(altB, altE);
-  const dwNomHdg1  = dwOverride ?? (state.zPattern ? fHdg : (fHdg + 180) % 360);
-  const p1dw       = solveleg(state.legModes.dw, dwTN1, dwTE1, dStillFt1, wD1, tD1, dwNomHdg1);
-  const dwHdg1     = p1dw.hdg;
+  const isZPattern  = state.zPattern;
+  const fVec        = hdgVec(fHdg);
 
-  // Pass-1 turns (determine altitude consumed at each turn boundary)
-  // When a heading override is active on base or downwind the heading is arbitrary,
-  // so forcing the pattern-hand turn direction can produce > 180° arcs that cross
-  // over themselves.  Use shortest-path (sign = 0) for any turn that involves an
-  // overridden leg.
-  const avgCSpdBF   = (perfB.cSpd  + perfF.cSpd)  / 2;
-  const avgGlideBF  = (perfB.glide + perfF.glide)  / 2;
-  const avgCSpdDB   = (perfDW.cSpd + perfB.cSpd)   / 2;
-  const avgGlideDB  = (perfDW.glide + perfB.glide)  / 2;
+  // Turn direction constraints: when a heading override is active on base or DW,
+  // the leg heading is arbitrary so forcing the pattern-hand direction can produce
+  // > 180° arcs that cross themselves. Use shortest-path (sign = 0) in those cases.
+  const avgCSpdBF  = (perfB.cSpd  + perfF.cSpd)  / 2;
+  const avgGlideBF = (perfB.glide + perfF.glide) / 2;
+  const avgCSpdDB  = (perfDW.cSpd + perfB.cSpd)  / 2;
+  const avgGlideDB = (perfDW.glide + perfB.glide)/ 2;
   const bfSign = bOverride != null ? 0 : patternSign;
   const dbSign = (dwOverride != null || bOverride != null || state.zPattern) ? 0 : patternSign;
-  const turn1BF = calcTurn(bHdg1, fHdgActual1, altF, avgCSpdBF, avgGlideBF, bfSign);
-  const turn1DB = calcTurn(dwHdg1, bHdg1,      altB, avgCSpdDB, avgGlideDB, dbSign);
 
-  // ── Pass 2: adjusted altitudes ────────────────────────────────────────────────
-  // Altitude consumed by each turn reduces the starting altitude of the following leg.
-  const altFstart = Math.max(50, altF - turn1BF.altConsumed);  // final leg start alt
-  const altBstart = Math.max(altFstart + 50, altB - turn1DB.altConsumed);  // base leg start alt
+  // ── Leg solver: given the final/base start altitudes, solve all three legs ──
+  // Returns a bundle of leg results, or null on unflyable crab (crosswind > canopy).
+  function solveLegs(altFs, altBs) {
+    // Final leg: altFs → 0
+    const fStillFt = altFs * perfF.glide;
+    const tF       = altFs / (dRateF * tasFactor(altFs / 2));
+    const wF       = avgWindVec(0, altFs);
+    const rF       = solveleg(state.legModes.f, fVec.n, fVec.e, fStillFt, wF, tF, fHdg);
+    if (rF === null) return null;
+    const fHdgActual = state.legModes.f === 'crab' ? rF.hdg : fHdg;
+    const fDisp      = rF.disp;
+    const fTrackUnit = normalize({n: fDisp.dN, e: fDisp.dE});
 
-  // Final leg (adjusted)
-  const fVec       = hdgVec(fHdg);
-  const fStillFt   = altFstart * perfF.glide;
-  const tF         = altFstart / (dRateF * tasFactor(altFstart / 2));
-  const wF         = avgWindVec(0, altFstart);
-  let fDisp, fHdgActual;
-  if (state.legModes.f === 'crab') {
-    const dfN = wF.n * (tF / 60) * FT_PER_NM, dfE = wF.e * (tF / 60) * FT_PER_NM;
-    const bfc = -2 * (fVec.n * dfN + fVec.e * dfE);
-    const cfc = dfN ** 2 + dfE ** 2 - fStillFt ** 2;
-    const dfc = bfc ** 2 - 4 * cfc;
-    if (dfc < 0) console.warn('calculate: final crab discriminant < 0 — crosswind too strong, using still-air fallback');
-    const kf  = dfc >= 0 ? (-bfc + Math.sqrt(dfc)) / 2 : fStillFt;
-    const fRN = fVec.n * kf - dfN, fRE = fVec.e * kf - dfE;
-    fHdgActual = (Math.atan2(fRE, fRN) * R2D + 360) % 360;
-    fDisp      = {dN: fRN + dfN, dE: fRE + dfE};
-  } else {
-    fHdgActual = fHdg;
-    fDisp = {dN: fVec.n * fStillFt + wF.n * (tF / 60) * FT_PER_NM, dE: fVec.e * fStillFt + wF.e * (tF / 60) * FT_PER_NM};
-  }
-  const fTrackUnit = normalize({n: fDisp.dN, e: fDisp.dE});
+    // Base leg: altBs → altF
+    const bTN = bOverride != null ? hdgVec(bOverride).n : (state.hand === 'left' ? -fTrackUnit.e :  fTrackUnit.e);
+    const bTE = bOverride != null ? hdgVec(bOverride).e : (state.hand === 'left' ?  fTrackUnit.n : -fTrackUnit.n);
+    const bStillFt = (altBs - altF) * perfB.glide;
+    const tB       = (altBs - altF) / (dRateB * tasFactor((altBs + altF) / 2));
+    const wB       = avgWindVec(altF, altBs);
+    const bNomHdg  = bOverride ?? (state.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
+    const rB       = solveleg(state.legModes.b, bTN, bTE, bStillFt, wB, tB, bNomHdg);
+    if (rB === null) return null;
 
-  // Base leg (adjusted: altBstart → altF)
-  const bTN = bOverride != null ? hdgVec(bOverride).n : (state.hand === 'left' ? -fTrackUnit.e :  fTrackUnit.e);
-  const bTE = bOverride != null ? hdgVec(bOverride).e : (state.hand === 'left' ?  fTrackUnit.n : -fTrackUnit.n);
-  const bStillFt   = (altBstart - altF) * perfB.glide;
-  const tB         = (altBstart - altF) / (dRateB * tasFactor((altBstart + altF) / 2));
-  const wB         = avgWindVec(altF, altBstart);
-  let bHdg, bDisp;
-  const bNomHdg = bOverride ?? (state.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
-  if (state.legModes.b === 'crab') {
-    const dbN = wB.n * (tB / 60) * FT_PER_NM, dbE = wB.e * (tB / 60) * FT_PER_NM;
-    const bc  = -2 * (bTN * dbN + bTE * dbE);
-    const cc  = dbN ** 2 + dbE ** 2 - bStillFt ** 2;
-    const bd  = bc ** 2 - 4 * cc;
-    if (bd < 0) console.warn('calculate: base crab discriminant < 0 — crosswind too strong, using still-air fallback');
-    const bk  = bd >= 0 ? (-bc + Math.sqrt(bd)) / 2 : bStillFt;
-    const bRN = bTN * bk - dbN, bRE = bTE * bk - dbE;
-    bHdg  = (Math.atan2(bRE, bRN) * R2D + 360) % 360;
-    bDisp = {dN: bRN + dbN, dE: bRE + dbE};
-  } else {
-    bHdg  = bNomHdg;
-    bDisp = {dN: hdgVec(bHdg).n * bStillFt + wB.n * (tB / 60) * FT_PER_NM, dE: hdgVec(bHdg).e * bStillFt + wB.e * (tB / 60) * FT_PER_NM};
+    // Downwind leg: altE → altB (turn-consumed altitude happens BELOW this band)
+    const dwTN = dwOverride != null ? hdgVec(dwOverride).n : dwTrackSign * fTrackUnit.n;
+    const dwTE = dwOverride != null ? hdgVec(dwOverride).e : dwTrackSign * fTrackUnit.e;
+    const dStillFt = (altE - altB) * perfDW.glide;
+    const tD       = (altE - altB) / (dRateDW * tasFactor((altE + altB) / 2));
+    const wD       = avgWindVec(altB, altE);
+    const dwNomHdg = dwOverride ?? (state.zPattern ? fHdg : (fHdg + 180) % 360);
+    const rDW      = solveleg(state.legModes.dw, dwTN, dwTE, dStillFt, wD, tD, dwNomHdg);
+    if (rDW === null) return null;
+
+    return {
+      fHdgActual, fDisp, fTrackUnit, tF, wF, fStillFt,
+      bHdg: rB.hdg, bDisp: rB.disp,                           tB, wB, bStillFt,
+      dwHdg: rDW.hdg, dDisp: rDW.disp,                         tD, wD, dStillFt,
+    };
   }
 
-  // Downwind leg (altE → altB; turns happen outside DW altitude band — unchanged)
-  const dwTN = dwOverride != null ? hdgVec(dwOverride).n : dwTrackSign * fTrackUnit.n;
-  const dwTE = dwOverride != null ? hdgVec(dwOverride).e : dwTrackSign * fTrackUnit.e;
-  const dStillFt = (altE - altB) * perfDW.glide;
-  const tD       = (altE - altB) / (dRateDW * tasFactor((altE + altB) / 2));
-  const wD       = avgWindVec(altB, altE);
-  const driftN   = wD.n * (tD / 60) * FT_PER_NM, driftE = wD.e * (tD / 60) * FT_PER_NM;
-  let dwHdg, dDisp;
-  const isZPattern = state.zPattern;
-  if (state.legModes.dw === 'crab') {
-    const b1 = -2 * (dwTN * driftN + dwTE * driftE);
-    const c1 = driftN ** 2 + driftE ** 2 - dStillFt ** 2;
-    const d1 = b1 ** 2 - 4 * c1;
-    if (d1 < 0) console.warn('calculate: downwind crab discriminant < 0 — crosswind too strong, using still-air fallback');
-    const k1 = d1 >= 0 ? (-b1 + Math.sqrt(d1)) / 2 : dStillFt;
-    const rN = dwTN * k1 - driftN, rE = dwTE * k1 - driftE;
-    dwHdg = (Math.atan2(rE, rN) * R2D + 360) % 360;
-    dDisp = {dN: rN + driftN, dE: rE + driftE};
-  } else {
-    dwHdg = dwOverride ?? (state.zPattern ? fHdg : (fHdg + 180) % 360);
-    dDisp = {dN: hdgVec(dwHdg).n * dStillFt + driftN, dE: hdgVec(dwHdg).e * dStillFt + driftE};
+  // ── Fixed-point iteration on turn-consumed altitudes ──────────────────────────
+  // Pass N solves legs at (altFstart, altBstart); pass N+1 recomputes turn altitude
+  // consumption using the resulting leg headings, and feeds back. Converges in 2–3
+  // iterations for typical inputs; we cap at 5 and bail with a user message on any
+  // unflyable condition (crab failure, or a turn consuming more altitude than exists).
+  let altFstart = altF, altBstart = altB;
+  let legs = solveLegs(altFstart, altBstart);
+  if (legs === null) { setStatus('Crosswind exceeds canopy speed on one or more legs — pattern unflyable'); return; }
+
+  let turnBF, turnDB;
+  for (let iter = 0; iter < 5; iter++) {
+    turnBF = calcTurn(legs.bHdg, legs.fHdgActual, altF, avgCSpdBF, avgGlideBF, bfSign);
+    turnDB = calcTurn(legs.dwHdg, legs.bHdg,      altB, avgCSpdDB, avgGlideDB, dbSign);
+
+    const newAltFstart = altF - turnBF.altConsumed;
+    const newAltBstart = altB - turnDB.altConsumed;
+
+    // Hard failures: turn consumes more altitude than available. Don't silently
+    // clamp — this is a real unflyable condition and the user needs to know.
+    if (newAltFstart < 50) {
+      setStatus('Base→Final turn consumes too much altitude — raise Turn Final or reduce bank angle');
+      return;
+    }
+    if (newAltBstart < newAltFstart + 50) {
+      setStatus('Downwind→Base turn consumes too much altitude — raise Turn Base or reduce bank angle');
+      return;
+    }
+
+    const converged =
+      Math.abs(newAltFstart - altFstart) < 0.5 &&
+      Math.abs(newAltBstart - altBstart) < 0.5;
+
+    altFstart = newAltFstart;
+    altBstart = newAltBstart;
+    legs = solveLegs(altFstart, altBstart);
+    if (legs === null) { setStatus('Crosswind exceeds canopy speed on one or more legs — pattern unflyable'); return; }
+
+    if (converged) break;
   }
 
-  // ── Pass-2 turns (with adjusted headings) ─────────────────────────────────────
-  const turnBF = calcTurn(bHdg, fHdgActual, altF, avgCSpdBF, avgGlideBF, bfSign);
-  const turnDB = calcTurn(dwHdg, bHdg,      altB, avgCSpdDB, avgGlideDB, dbSign);
+  // Final recompute of turns with the converged leg headings, for downstream use.
+  turnBF = calcTurn(legs.bHdg, legs.fHdgActual, altF, avgCSpdBF, avgGlideBF, bfSign);
+  turnDB = calcTurn(legs.dwHdg, legs.bHdg,      altB, avgCSpdDB, avgGlideDB, dbSign);
+
+  // Destructure converged leg results into flat locals so downstream code is unchanged.
+  const {
+    fHdgActual, fDisp, fTrackUnit, tF, wF, fStillFt,
+    bHdg, bDisp, tB, wB, bStillFt,
+    dwHdg, dDisp, tD, wD, dStillFt,
+  } = legs;
 
   // ── Backward position chain ───────────────────────────────────────────────────
   // tFinal = where final leg begins (after B→F turn); tBase = where base begins (after DW→B turn).
@@ -381,8 +387,11 @@ function calculate() {
       .filter(xl => xl.alt > 0)
       .sort((a, b) => a.alt - b.alt);
 
-    extrasSorted.forEach((xl, i) => {
-      if (xl.alt <= topAlt) return; // altitude must be above current top
+    // Use a classic for loop so that early `return` inside the body bails out of
+    // calculate() (a `return` inside .forEach() would only skip the iteration).
+    for (let i = 0; i < extrasSorted.length; i++) {
+      const xl = extrasSorted[i];
+      if (xl.alt <= topAlt) continue; // altitude must be above current top
 
       const xlPerf  = getLegPerf(xl.id);
       const dRateXL = (xlPerf.cSpd / xlPerf.glide) * FT_MIN_PER_KT;
@@ -400,28 +409,16 @@ function calculate() {
       // Solve heading and displacement for a straight-leg band [altBot, xl.alt].
       // The turn altitude consumed must be SUBTRACTED from the straight band (two-pass),
       // so that the turn happens within this leg's altitude range, not below it.
+      // Returns null when the crab quadratic is unsolvable (unflyable crosswind).
       function solveXL(altBot) {
         const tXL_    = (xl.alt - altBot) / (dRateXL * tasFactor((xl.alt + altBot) / 2));
         const wXL_    = avgWindVec(altBot, xl.alt);
-        const dN_     = wXL_.n * (tXL_ / 60) * FT_PER_NM;
-        const dE_     = wXL_.e * (tXL_ / 60) * FT_PER_NM;
         const still_  = (xl.alt - altBot) * xlPerf.glide;
-        let hdg_, disp_;
-        if (xlMode === 'crab') {
-          const tN = hdgVec(nomHdg).n, tE = hdgVec(nomHdg).e;
-          const b  = -2 * (tN * dN_ + tE * dE_);
-          const c  = dN_ ** 2 + dE_ ** 2 - still_ ** 2;
-          const d  = b ** 2 - 4 * c;
-          if (d < 0) console.warn(`calculate: extra leg ${xl.id} crab discriminant < 0 — using still-air fallback`);
-          const k  = d >= 0 ? (-b + Math.sqrt(d)) / 2 : still_;
-          const rN = tN * k - dN_, rE = tE * k - dE_;
-          hdg_  = (Math.atan2(rE, rN) * R2D + 360) % 360;
-          disp_ = { dN: rN + dN_, dE: rE + dE_ };
-        } else {
-          hdg_  = nomHdg;
-          disp_ = { dN: hdgVec(nomHdg).n * still_ + dN_, dE: hdgVec(nomHdg).e * still_ + dE_ };
-        }
-        return { hdg: hdg_, disp: disp_, tSec: Math.round(tXL_ * 60), w: wXL_, still: still_ };
+        const tN      = hdgVec(nomHdg).n;
+        const tE      = hdgVec(nomHdg).e;
+        const r       = solveleg(xlMode, tN, tE, still_, wXL_, tXL_, nomHdg);
+        if (r === null) return null;
+        return { hdg: r.hdg, disp: r.disp, tSec: Math.round(tXL_ * 60), w: wXL_, still: still_ };
       }
 
       // Two-pass approach — mirrors the standard altBstart/altFstart model:
@@ -432,14 +429,16 @@ function calculate() {
       //           than eating into the leg below.
       // Turn direction is always shortest-path (sign = 0): extra-leg headings are
       // user-specified and arbitrary, so forcing R/L can produce > 180° arcs.
-      const p1       = solveXL(topAlt);
-      const turn1XL  = calcTurn(p1.hdg, lowerHdg, topAlt, avgCSpd, avgGlide, 0);
+      const p1 = solveXL(topAlt);
+      if (p1 === null) { setStatus(`Extra leg ${xl.id}: crosswind exceeds canopy speed — unflyable`); return; }
+      const turn1XL = calcTurn(p1.hdg, lowerHdg, topAlt, avgCSpd, avgGlide, 0);
 
       // altBotStraight: bottom of the straight-leg portion; capped so the band
       // never collapses to less than 50 ft.
       const altBotStraight = Math.min(xl.alt - 50, topAlt + turn1XL.altConsumed);
 
-      const p2     = solveXL(altBotStraight);
+      const p2 = solveXL(altBotStraight);
+      if (p2 === null) { setStatus(`Extra leg ${xl.id}: crosswind exceeds canopy speed — unflyable`); return; }
       const xlHdg  = p2.hdg;
       const xlDisp = p2.disp;
       const wXL    = p2.w;
@@ -480,7 +479,7 @@ function calculate() {
 
       topPoint = xlEntry;
       topAlt   = xl.alt;
-    });
+    }
   }
 
   // ── Steered heading endpoint lines ──
@@ -497,12 +496,9 @@ function calculate() {
   const fDrift  = hdgDiff(fHdgActual, fHdg);
   const dwDrift = hdgDiff(dwHdg,      trackHdgDeg(dDisp));
 
-  // ── Wind components ──
-  function safeWC(w, unitVec) {
-    if (!isFinite(w.n) || !isFinite(w.e)) return 0;
-    return Math.round(w.n * unitVec.n + w.e * unitVec.e);
-  }
-
+  // ── Wind components (all measured against GROUND TRACK, not heading) ──
+  // Using the track direction keeps "along" = headwind/tailwind semantics
+  // consistent across all legs even in crab mode where heading ≠ track.
   const fAlong    = safeWC(wF, fTrackUnit);
   const fCrossVec = {n: -fTrackUnit.e, e: fTrackUnit.n};
   const fCross    = safeWC(wF, fCrossVec);
@@ -512,10 +508,10 @@ function calculate() {
   const dwCrossVec  = {n: -dwTrackUnit.e, e: dwTrackUnit.n};
   const dwCross     = safeWC(wD, dwCrossVec);
 
-  const bHdgVec   = hdgVec(bHdg);
-  const bAlong    = safeWC(wB, bHdgVec);
-  const bCrossVec = {n: -bHdgVec.e, e: bHdgVec.n};
-  const bCross    = safeWC(wB, bCrossVec);
+  const bTrackUnit = normalize({n: bDisp.dN, e: bDisp.dE});
+  const bCrossVec  = {n: -bTrackUnit.e, e: bTrackUnit.n};
+  const bAlong     = safeWC(wB, bTrackUnit);
+  const bCross     = safeWC(wB, bCrossVec);
 
   const fWC = {along: fAlong,  cross: fCross};
   const dWC = {along: dwAlong, cross: dwCross};
