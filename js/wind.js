@@ -287,7 +287,7 @@ function buildWindTable() {
 
   state.winds.forEach((w, i) => {
     const row = document.createElement('div');
-    const cls = w.aglFt === 0 ? 'sfc' : w.real ? 'real' : 'interpolated';
+    const cls = w.real ? 'real' : 'interpolated';
     row.className = `wind-row ${cls}`;
 
     const altEl = document.createElement('div');
