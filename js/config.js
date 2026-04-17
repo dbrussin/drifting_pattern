@@ -46,8 +46,10 @@ function debounce(fn, wait) {
   };
 }
 
-// GFS API: pressure levels (hPa) to query for winds + temperature
-const PRESSURE_LEVELS = [1000, 975, 950, 925, 850, 700, 600, 500, 400, 300];
+// GFS API: pressure levels (hPa) to query for winds + temperature.
+// All levels from 1000–500 hPa (~surface to ~18k ft MSL); covers 14k ft AGL
+// at even high-elevation DZs. 400/300 hPa (~23k/30k ft) are above any exit altitude.
+const PRESSURE_LEVELS = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
 
 // GFS API: fixed height levels above ground (metres)
 const HEIGHT_LEVELS = [80, 120, 180]; // → ~262, 394, 591 ft AGL
