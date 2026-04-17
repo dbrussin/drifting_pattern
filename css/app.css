@@ -212,7 +212,6 @@ input[type=number] { -moz-appearance: textfield; }
 .wind-row input:focus { outline: none; border-color: var(--accent2); }
 .wind-row.real .alt-label { color: var(--accent2); }
 .wind-row.interpolated .alt-label { color: var(--muted); }
-.wind-row.sfc .alt-label { color: var(--accent); }
 .wind-row.real input { border-color: var(--accent2); }
 .wind-row.interpolated input { border-color: var(--border); }
 .fetch-btn {
