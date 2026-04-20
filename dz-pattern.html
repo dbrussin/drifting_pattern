@@ -483,11 +483,13 @@
 <div id="forecast-modal" class="waiver-modal" style="display:none" role="dialog" aria-modal="true">
   <div class="forecast-modal-card">
     <div class="forecast-modal-hdr">
-      <span class="forecast-modal-title">96-Hour Forecast</span>
+      <div class="forecast-modal-hdr-info">
+        <span class="forecast-modal-title">96-Hour Forecast</span>
+        <span id="forecast-modal-status" class="forecast-modal-status"></span>
+      </div>
       <button id="fc-details-toggle" class="fc-toggle-btn" onclick="toggleFcDetails()">Show Details</button>
       <button class="overlay-close" onclick="closeForecastModal()">✕</button>
     </div>
-    <div id="forecast-modal-status" class="forecast-modal-status"></div>
     <div class="forecast-table-wrap" id="forecast-table-wrap"></div>
   </div>
 </div>

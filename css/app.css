@@ -640,17 +640,15 @@ input[type=number] { -moz-appearance: textfield; }
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
-.forecast-modal-title { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; }
+.forecast-modal-hdr-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.forecast-modal-title { font-size: 14px; font-weight: 700; color: var(--text); }
 .fc-toggle-btn {
   font-size: 11px; font-weight: 600; padding: 4px 10px;
   background: var(--panel2); border: 1px solid var(--border);
   border-radius: 5px; color: var(--accent2); cursor: pointer; white-space: nowrap;
 }
 .fc-toggle-btn:active { background: var(--border); }
-.forecast-modal-status {
-  padding: 3px 12px 5px; font-size: 11px; color: var(--muted);
-  font-family: 'Space Mono', monospace; flex-shrink: 0;
-}
+.forecast-modal-status { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
 .forecast-table-wrap { overflow: auto; flex: 1; }
 .forecast-table {
   border-collapse: collapse; font-size: 10px; font-family: 'Space Mono', monospace;
