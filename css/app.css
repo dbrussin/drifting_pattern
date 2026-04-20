@@ -456,6 +456,19 @@ input[type=number] { -moz-appearance: textfield; }
   font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent2);
   white-space: nowrap; min-width: 32px; text-align: right;
 }
+.wind-tray-meta {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; line-height: 1.5;
+  min-height: 0;
+}
+.view-forecast-btn {
+  display: block; width: 100%; margin-top: 10px;
+  padding: 7px 0; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--accent2); font-size: 12px; font-weight: 600;
+  cursor: pointer; letter-spacing: 0.04em;
+}
+.view-forecast-btn:disabled { opacity: 0.4; cursor: default; }
+.view-forecast-btn:not(:disabled):active { background: var(--border); }
 .winds-source-note {
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
   font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; line-height: 1.6;
@@ -616,3 +629,41 @@ input[type=number] { -moz-appearance: textfield; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* ── FORECAST MODAL ── */
+.forecast-modal-card {
+  background: var(--panel); border-radius: 12px;
+  width: min(96vw, 900px); max-height: 85vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.forecast-modal-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.forecast-modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.forecast-modal-status {
+  padding: 10px 16px; font-size: 12px; color: var(--muted);
+  font-family: 'Space Mono', monospace; flex-shrink: 0;
+}
+.forecast-table-wrap { overflow: auto; flex: 1; }
+.forecast-table {
+  border-collapse: collapse; font-size: 11px; font-family: 'Space Mono', monospace;
+  white-space: nowrap;
+}
+.forecast-table th, .forecast-table td {
+  border: 1px solid var(--border); padding: 4px 6px; text-align: center; vertical-align: middle;
+}
+.forecast-table thead th {
+  background: var(--panel2); color: var(--muted); position: sticky; top: 0; z-index: 1;
+}
+.forecast-table .ft-row-hdr {
+  background: var(--panel2); color: var(--accent2); position: sticky; left: 0; z-index: 2;
+  font-weight: 600; min-width: 56px;
+}
+.forecast-table thead .ft-row-hdr { z-index: 3; }
+.forecast-table .ft-day-hdr { background: var(--panel2); border-bottom: none; }
+.ft-cell-speed { display: block; color: var(--text); font-weight: 600; }
+.ft-cell-dir   { display: block; color: var(--muted); font-size: 10px; }
+.ft-cell-cloud { display: block; color: var(--accent2); font-size: 10px; }
+.ft-cell--cloudy { background: rgba(77, 244, 200, 0.06); }
+.ft-cell--empty { color: var(--muted); }
