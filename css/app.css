@@ -662,8 +662,24 @@ input[type=number] { -moz-appearance: textfield; }
 }
 .forecast-table thead .ft-row-hdr { z-index: 3; }
 .forecast-table .ft-day-hdr { background: var(--panel2); border-bottom: none; }
+/* Day columns: yellow tint */
+.ft-hr-hdr { color: var(--muted); }
+.ft-hdr-day { color: var(--accent) !important; background: rgba(232,244,77,0.08) !important; }
+/* SFC row — always shows text */
+.ft-sfc-hdr { color: var(--text) !important; }
+.ft-sfc-cell { background: var(--panel2); padding: 3px 5px; }
+.ft-cell-temp  { display: block; color: var(--text); font-weight: 600; }
 .ft-cell-speed { display: block; color: var(--text); font-weight: 600; }
+.ft-cell-gust  { display: block; color: var(--accent); font-size: 10px; }
 .ft-cell-dir   { display: block; color: var(--muted); font-size: 10px; }
-.ft-cell-cloud { display: block; color: var(--accent2); font-size: 10px; }
-.ft-cell--cloudy { background: rgba(77, 244, 200, 0.06); }
-.ft-cell--empty { color: var(--muted); }
+.ft-cell-precip-prob { display: block; color: var(--accent2); font-size: 10px; }
+.ft-cell-precip      { display: block; color: var(--accent2); font-size: 10px; }
+/* Pressure-level cells — grayscale bg, text hidden until hover/tap */
+.ft-pl-cell { background: rgb(26,26,26); padding: 3px 5px; cursor: default; }
+.ft-hidden { display: block; opacity: 0; font-size: 10px; line-height: 1.3;
+             transition: opacity 0.1s; pointer-events: none; }
+.ft-pl-cell:hover .ft-hidden,
+.ft-pl-cell.ft-touched .ft-hidden {
+  opacity: 1; color: var(--ftc, var(--text));
+}
+.ft-cell-cloud { display: block; font-size: 10px; }

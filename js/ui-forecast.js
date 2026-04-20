@@ -42,9 +42,10 @@ async function _fetchFullForecast(lat, lng) {
     const plWindVars = PRESSURE_LEVELS.flatMap(p => [`windspeed_${p}hPa`, `winddirection_${p}hPa`]).join(',');
     const plHgtVars  = PRESSURE_LEVELS.map(p => `geopotential_height_${p}hPa`).join(',');
     const ccVars     = PRESSURE_LEVELS.map(p => `cloud_cover_${p}hPa`).join(',');
+    const sfcVars    = 'temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation_probability,precipitation,is_day';
 
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-      `&hourly=${plWindVars},${plHgtVars},${ccVars}` +
+      `&hourly=${plWindVars},${plHgtVars},${ccVars},${sfcVars}` +
       `&wind_speed_unit=kn&forecast_days=4&timezone=auto`;
 
     const rawData = await (await fetch(url)).json();
@@ -67,37 +68,32 @@ function _renderForecastTable(rawData, fieldElevFt, ts) {
   const ageStr = ageMin < 1 ? 'just now' : `${ageMin}m ago`;
   _setFcStatus(`Loaded ${ageStr}`);
 
-  const h    = rawData.hourly;
+  const h      = rawData.hourly;
   const utcOff = rawData.utc_offset_seconds || 0;
-  const times  = h.time; // ISO strings, up to 96
+  const times  = h.time;
 
-  // Use first hour's geopotential heights to determine which pressure levels
-  // are ≤ 18,000 ft MSL and above ground.
-  const rows = [];
+  // Pressure levels ≤ 18,000 ft MSL and above ground, sorted low → high
+  const plRows = [];
   for (const p of PRESSURE_LEVELS) {
-    const hgtKey = `geopotential_height_${p}hPa`;
-    const hgtArr = h[hgtKey];
+    const hgtArr = h[`geopotential_height_${p}hPa`];
     if (!hgtArr) continue;
     const altMslFt = (hgtArr[0] ?? 0) * 3.28084;
     const altAglFt = Math.round(altMslFt - fieldElevFt);
-    if (altAglFt < 0) continue;
-    if (altMslFt > 18500) continue;
-    rows.push({ p, altAglFt, hgtKey });
+    if (altAglFt < 0 || altMslFt > 18500) continue;
+    plRows.push({ p, altAglFt });
   }
-  // Sort surface → top
-  rows.sort((a, b) => a.altAglFt - b.altAglFt);
+  plRows.sort((a, b) => a.altAglFt - b.altAglFt);
 
-  // Build table HTML
-  const thead = _buildFcThead(times, utcOff);
-  const tbody = _buildFcTbody(rows, times, h);
+  const thead = _buildFcThead(times, utcOff, h.is_day);
+  const tbody = _buildFcTbody(plRows, times, h);
 
   const wrap = document.getElementById('forecast-table-wrap');
   wrap.innerHTML = `<table class="forecast-table">${thead}${tbody}</table>`;
+  _attachFcTouchHandlers(wrap);
 }
 
-function _buildFcThead(times, utcOff) {
-  // Group hours by local date for the day-header row
-  const days = []; // [{label, span}]
+function _buildFcThead(times, utcOff, isDay) {
+  const days = [];
   let curDay = '', curSpan = 0;
   for (const iso of times) {
     const d = _localDay(iso, utcOff);
@@ -111,38 +107,81 @@ function _buildFcThead(times, utcOff) {
   dayRow += '</tr>';
 
   let hrRow = '<tr><th class="ft-row-hdr">Alt AGL</th>';
-  for (const iso of times) hrRow += `<th>${_localHour(iso, utcOff)}</th>`;
+  for (let i = 0; i < times.length; i++) {
+    const cls = isDay?.[i] === 1 ? 'ft-hr-hdr ft-hdr-day' : 'ft-hr-hdr';
+    hrRow += `<th class="${cls}">${_localHour(times[i], utcOff)}</th>`;
+  }
   hrRow += '</tr>';
 
   return `<thead>${dayRow}${hrRow}</thead>`;
 }
 
-function _buildFcTbody(rows, times, h) {
-  let tbody = '<tbody>';
-  for (const row of rows) {
+function _buildFcTbody(plRows, times, h) {
+  return `<tbody>${_buildFcSfcRow(times, h)}${_buildFcPlRows(plRows, times, h)}</tbody>`;
+}
+
+function _buildFcSfcRow(times, h) {
+  let row = '<tr><td class="ft-row-hdr ft-sfc-hdr">SFC</td>';
+  for (let i = 0; i < times.length; i++) {
+    const temp  = h.temperature_2m?.[i];
+    const spd   = h.wind_speed_10m?.[i];
+    const gust  = h.wind_gusts_10m?.[i];
+    const dir   = h.wind_direction_10m?.[i];
+    const pProb = h.precipitation_probability?.[i];
+    const precip = h.precipitation?.[i];
+
+    row += `<td class="ft-sfc-cell">` +
+      (temp  != null ? `<span class="ft-cell-temp">${Math.round(temp)}°</span>` : '') +
+      (spd   != null ? `<span class="ft-cell-speed">${Math.round(spd)}kt</span>` : '') +
+      (gust  != null && Math.round(gust) !== Math.round(spd ?? 0)
+        ? `<span class="ft-cell-gust">g${Math.round(gust)}</span>` : '') +
+      (dir   != null ? `<span class="ft-cell-dir">${Math.round(dir)}°</span>` : '') +
+      (pProb != null ? `<span class="ft-cell-precip-prob">${Math.round(pProb)}%</span>` : '') +
+      (precip != null && precip > 0 ? `<span class="ft-cell-precip">${precip.toFixed(1)}mm</span>` : '') +
+      `</td>`;
+  }
+  return row + '</tr>';
+}
+
+function _buildFcPlRows(plRows, times, h) {
+  let html = '';
+  for (const row of plRows) {
     const label = row.altAglFt < 1000
       ? `${row.altAglFt}ft`
       : `${(row.altAglFt / 1000).toFixed(1)}k`;
 
-    tbody += `<tr><td class="ft-row-hdr">${label}</td>`;
+    html += `<tr><td class="ft-row-hdr">${label}</td>`;
     for (let i = 0; i < times.length; i++) {
       const spd = h[`windspeed_${row.p}hPa`]?.[i];
       const dir = h[`winddirection_${row.p}hPa`]?.[i];
       const cc  = h[`cloud_cover_${row.p}hPa`]?.[i];
-      if (spd == null && dir == null) {
-        tbody += `<td class="ft-cell--empty">—</td>`;
+
+      if (cc == null && spd == null) {
+        html += `<td class="ft-pl-cell">`;
       } else {
-        const cloudy = cc != null && cc >= 50;
-        tbody += `<td${cloudy ? ' class="ft-cell--cloudy"' : ''}>` +
-          `<span class="ft-cell-speed">${Math.round(spd ?? 0)}kt</span>` +
-          `<span class="ft-cell-dir">${Math.round(dir ?? 0)}°</span>` +
-          (cc != null ? `<span class="ft-cell-cloud">☁${Math.round(cc)}%</span>` : '') +
-          `</td>`;
+        const v   = cc != null ? Math.round(26 + 229 * (cc / 100)) : 26;
+        const tc  = v >= 140 ? '#0f1014' : '#d8dde8';
+        html += `<td class="ft-pl-cell" style="background:rgb(${v},${v},${v});--ftc:${tc}">`;
       }
+      html +=
+        `<span class="ft-hidden ft-cell-speed">${spd != null ? Math.round(spd) + 'kt' : '—'}</span>` +
+        `<span class="ft-hidden ft-cell-dir">${dir != null ? Math.round(dir) + '°' : ''}</span>` +
+        `<span class="ft-hidden ft-cell-cloud">${cc != null ? '☁' + Math.round(cc) + '%' : ''}</span>` +
+        `</td>`;
     }
-    tbody += '</tr>';
+    html += '</tr>';
   }
-  return tbody + '</tbody>';
+  return html;
+}
+
+// ── Touch handler ─────────────────────────────────────────────────────────────
+
+function _attachFcTouchHandlers(wrap) {
+  wrap.addEventListener('touchstart', e => {
+    const td = e.target.closest('td.ft-pl-cell');
+    wrap.querySelectorAll('td.ft-touched').forEach(el => el.classList.remove('ft-touched'));
+    if (td) td.classList.add('ft-touched');
+  }, { passive: true });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
