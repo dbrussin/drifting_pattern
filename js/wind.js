@@ -65,7 +65,7 @@ async function fetchWinds(forceRefresh = false) {
     const htVars     = HEIGHT_LEVELS.flatMap(h => [`windspeed_${h}m`, `winddirection_${h}m`]).join(',');
 
     // forecast_days=2 ensures +12h is always available regardless of current hour
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=${plWindVars},${plHgtVars},${plTmpVars},${htVars},windspeed_10m,winddirection_10m&wind_speed_unit=kn&forecast_days=2&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=${plWindVars},${plHgtVars},${plTmpVars},${htVars},windspeed_10m,winddirection_10m,windgusts_10m&wind_speed_unit=kn&forecast_days=2&timezone=auto`;
     const rawData = await (await fetch(url, {signal})).json();
 
     if (!rawData?.hourly?.time?.length) {
@@ -140,11 +140,13 @@ function processWindData(d, fieldElevFt) {
   if (headerCtrl) headerCtrl.style.display = 'flex';
 
   // Surface wind — guard against null API values (Math.round(null) = 0 is misleading)
-  const _rawDir = d.hourly.winddirection_10m?.[hi];
-  const _rawSpd = d.hourly.windspeed_10m?.[hi];
+  const _rawDir  = d.hourly.winddirection_10m?.[hi];
+  const _rawSpd  = d.hourly.windspeed_10m?.[hi];
+  const _rawGust = d.hourly.windgusts_10m?.[hi];
   state.surfaceWind = {
-    dirDeg:   _rawDir != null ? Math.round(_rawDir) : null,
-    speedKts: _rawSpd != null ? Math.round(_rawSpd) : null,
+    dirDeg:   _rawDir  != null ? Math.round(_rawDir)  : null,
+    speedKts: _rawSpd  != null ? Math.round(_rawSpd)  : null,
+    gustKts:  _rawGust != null ? Math.round(_rawGust) : null,
   };
   state.fieldElevFt = fieldElevFt;
 
@@ -156,7 +158,7 @@ function processWindData(d, fieldElevFt) {
 
   // Fixed-height-level winds (AGL → MSL), no temperature available
   // Store unrounded values — rounding happens at display time only.
-  const htAGLft = {80: 262, 120: 394, 180: 591};
+  const htAGLft = {80: 262};
   HEIGHT_LEVELS.forEach(hm => {
     const spd = d.hourly[`windspeed_${hm}m`]?.[hi];
     const dir = d.hourly[`winddirection_${hm}m`]?.[hi];
@@ -216,7 +218,7 @@ function processWindData(d, fieldElevFt) {
     real: true, label: 'SFC', source: '10m',
   });
 
-  // Fixed height-level rows (262/394/591ft AGL) — stored unrounded
+  // Fixed height-level rows (262ft AGL) — stored unrounded
   HEIGHT_LEVELS.forEach(hm => {
     const spd = d.hourly[`windspeed_${hm}m`]?.[hi];
     const dir = d.hourly[`winddirection_${hm}m`]?.[hi];
@@ -310,7 +312,23 @@ function buildWindTable() {
     tempEl.className = 'temp-label';
     if (w.tempC !== null && w.tempC !== undefined) tempEl.textContent = Math.round(w.tempC) + '°';
 
-    row.appendChild(altEl); row.appendChild(dirEl); row.appendChild(spdEl); row.appendChild(tempEl);
+    row.appendChild(altEl);
+    row.appendChild(dirEl);
+    // SFC row: wrap SPD input with a yellow gust overlay (display-only, hidden on focus)
+    if (i === 0 && state.surfaceWind?.gustKts > 0) {
+      const spdWrap = document.createElement('div');
+      spdWrap.className = 'wind-spd-wrap';
+      spdEl.classList.add('wind-spd-with-gust');
+      const gustSpan = document.createElement('span');
+      gustSpan.className = 'wind-gust-inline';
+      gustSpan.textContent = `G${state.surfaceWind.gustKts}`;
+      spdWrap.appendChild(spdEl);
+      spdWrap.appendChild(gustSpan);
+      row.appendChild(spdWrap);
+    } else {
+      row.appendChild(spdEl);
+    }
+    row.appendChild(tempEl);
     c.appendChild(row);
   });
 }
