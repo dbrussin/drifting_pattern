@@ -241,3 +241,21 @@ document.addEventListener('visibilitychange', () => {
   if (cached) updateWindStatusAge(cached.ts);
   else fetchWinds().then(calculate);
 });
+
+// ── PWA: service worker + persistent storage ──────────────────────────────────
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.info('[PWA] Service worker registration failed:', err);
+    });
+  });
+}
+
+// Request persistent storage so iOS doesn't purge localStorage on inactivity.
+// navigator.storage.persist() is available in iOS 15.4+ for installed PWAs.
+if (navigator.storage?.persist) {
+  navigator.storage.persist().then(granted => {
+    if (!granted) console.info('[PWA] Persistent storage not granted — data may be evicted after ~7 days of inactivity on iOS');
+  });
+}
