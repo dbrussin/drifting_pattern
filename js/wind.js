@@ -565,8 +565,13 @@ function checkWindRefresh() {
 
 const _windRefreshInterval = setInterval(checkWindRefresh, 60 * 1000);
 
-// Fire immediately when the tab regains visibility (returning from another tab,
-// waking from sleep, restoring a bfcache'd page). 'pageshow' covers mobile
-// bfcache restores where visibilitychange may not fire.
+// Fire immediately whenever the page regains the user's attention. Redundant
+// listeners give defense-in-depth across desktop/mobile browser quirks:
+//   visibilitychange — primary: tab switch, OS app switch (iOS/Android), sleep/wake
+//   pageshow(persisted) — bfcache restore (iOS Safari after long background)
+//   focus — desktop window focus without visibility change (cmd-tab with window
+//           partially visible); harmless belt-and-suspenders on mobile too
+// checkWindRefresh is idempotent — re-entry with an unchanged slot key no-ops.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkWindRefresh(); });
 window.addEventListener('pageshow', (e) => { if (e.persisted) checkWindRefresh(); });
+window.addEventListener('focus', checkWindRefresh);
