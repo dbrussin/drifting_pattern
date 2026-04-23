@@ -543,12 +543,12 @@ function updateWindStatusAge(ts) {
 }
 
 // ── Auto-refresh ──────────────────────────────────────────────────────────────
-// Check every 60s; fetch fresh data if cache is stale and page is visible.
-// On cache hit, re-run processWindData whenever the nearest hourly (hi) or
+// Check every 60s and on tab-visibility change; fetch fresh data if cache is
+// stale, otherwise re-run processWindData whenever the nearest hourly (hi) or
 // minutely_15 (mi) slot has advanced so the 15-min readings don't go stale
 // for up to 20 min while the tab sits open.
 
-const _windRefreshInterval = setInterval(() => {
+function checkWindRefresh() {
   if (!state.target || document.hidden) return;
   const cached = findCachedWinds(state.target.lat, state.target.lng);
   if (!cached) { fetchWinds().then(calculate).catch(e => console.error('Wind auto-refresh failed:', e)); return; }
@@ -561,4 +561,17 @@ const _windRefreshInterval = setInterval(() => {
     processWindData(cached.rawData, cached.fieldElevFt);
     calculate();
   }
-}, 60 * 1000);
+}
+
+const _windRefreshInterval = setInterval(checkWindRefresh, 60 * 1000);
+
+// Fire immediately whenever the page regains the user's attention. Redundant
+// listeners give defense-in-depth across desktop/mobile browser quirks:
+//   visibilitychange — primary: tab switch, OS app switch (iOS/Android), sleep/wake
+//   pageshow(persisted) — bfcache restore (iOS Safari after long background)
+//   focus — desktop window focus without visibility change (cmd-tab with window
+//           partially visible); harmless belt-and-suspenders on mobile too
+// checkWindRefresh is idempotent — re-entry with an unchanged slot key no-ops.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkWindRefresh(); });
+window.addEventListener('pageshow', (e) => { if (e.persisted) checkWindRefresh(); });
+window.addEventListener('focus', checkWindRefresh);
