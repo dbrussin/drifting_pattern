@@ -76,32 +76,248 @@ function safeWC(w, unitVec) {
 /**
  * Top-level entry point. Runs each enabled mode's solver, then redraws.
  * Modes (state.modes.canopy, state.modes.freefall) are independent on/off toggles.
- * Each mode writes to its own state slot (state.pattern, state.freefall) which the
- * matching draw function reads. New modes plug in here and in drawPattern().
+ * Each mode writes to its own result slot (state.canopy.result, state.freefall.result) which
+ * the matching draw function reads. New modes plug in here and in drawPattern().
  */
 function calculate() {
   if (!state.target) return;
   if (state.modes.canopy)   calculateCanopyPattern();
-  else                      state.pattern = null;
+  else                      state.canopy.result = null;
   if (state.modes.freefall) calculateFreefallPlan();
-  else                      state.freefall = null;
+  else                      state.freefall.result = null;
   drawPattern();
 }
 
+// ── Freefall (jump run) planner ───────────────────────────────────────────────
+
 /**
- * Freefall plan stub — populated by future jump run planner / movement planner.
- * Will read shared inputs (winds, exit alt, opening alt, jump run heading) and
- * produce per-group exit timing, drift tracks, and breakoff points.
+ * Per-group freefall + tracking solver. For each group exits → breakoff → opening,
+ * computes group center positions plus per-jumper opening positions accounting for
+ * exit throw, integrated wind drift, and (for movement groups) glide-path movement.
+ * Then iterates exit timing along jump run so closest jumper-pair distance ≥ exitSepFt.
+ *
+ * Anchors group #1's opening center at the landing target — i.e. spots so the first
+ * group opens over the spot. Subsequent groups exit later in the pass, so their
+ * opening centers move further down the jump run.
+ *
+ * Tracking model (breakoff → opening, fixed 1000 ft band, 1:1 GR = 1000 ft horizontal):
+ *  · Vertical formations (FS/VFS/Student/Tandem): jumpers radiate evenly around 360°
+ *    from group center. Solo (size=1) does not track.
+ *  · Movement: leader continues along group heading; others fan ±45° from heading.
+ *
+ * Exit-throw: simple decay model — TAS_fps × τ with τ ≈ 2 sec; this approximates
+ * the integrated forward distance until horizontal velocity matches the airmass.
  */
 function calculateFreefallPlan() {
-  state.freefall = null;
+  const groups = state.freefall.groups;
+  if (!groups || !groups.length) { state.freefall.result = null; return; }
+
+  const altExit = parseFloat(document.getElementById('alt-exit').value);
+  const altOpen = parseFloat(document.getElementById('alt-open').value);
+  if (!isFinite(altExit) || !isFinite(altOpen)) { state.freefall.result = null; return; }
+
+  const breakoffAlt = altOpen + 1000;
+  if (altExit <= breakoffAlt + 100) {
+    setStatus('Exit altitude must be ≥1000 ft above breakoff (opening + 1000)');
+    state.freefall.result = null;
+    return;
+  }
+
+  const jrAirspeedKts = parseFloat(document.getElementById('jr-airspeed').value) || 80;
+  const exitSepFt     = parseFloat(document.getElementById('exit-sep').value)    || 1500;
+
+  // Jump run heading: prefer state.jumpRun.hdgDeg (canopy may have set it); else from
+  // mean wind across exit→open band, else 0. Sync DOM display when we computed it
+  // ourselves so the JR heading slider stays accurate when canopy mode is off.
+  let jrHdg = state.jumpRun.hdgDeg;
+  if (jrHdg == null) {
+    const wExit = avgWindVec(altOpen, altExit);
+    if (vecLen(wExit) > MIN_WIND_SPD_KT) {
+      const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
+      jrHdg = (windVelDir + 180) % 360;
+    } else {
+      jrHdg = 0;
+    }
+    if (!state.modes.canopy) {
+      const dEl = document.getElementById('jr-hdg-display');
+      const sEl = document.getElementById('jr-hdg-slider');
+      if (dEl) dEl.value = Math.round(jrHdg);
+      if (sEl) sEl.value = Math.round(jrHdg);
+    }
+  }
+
+  const jrVec  = hdgVec(jrHdg);
+  const jrPerp = { n: jrVec.e, e: -jrVec.n };  // 90° right of jump run
+
+  // Aircraft ground speed along jump run (TAS at exit alt + along-track wind component)
+  const wJr        = getWindAtAGL(altExit);
+  const jrTAS      = jrAirspeedKts * tasFactor(altExit);
+  const jrAlongWC  = wJr.n * jrVec.n + wJr.e * jrVec.e;
+  const jrGndSpdKts = Math.max(1, jrTAS + jrAlongWC);
+  const jrGndSpdFps = jrGndSpdKts * FT_PER_NM / 3600;
+
+  // Anchor: landing target is where group #1 opens.
+  const openTarget = state.target;
+
+  // Tracking distance (1:1 glide, breakoff→open vertical = 1000 ft fixed).
+  const trackDistFt = breakoffAlt - altOpen;
+
+  // Per-jumper offsets relative to group center at opening alt.
+  function memberOpeningOffsets(g) {
+    if (g.size <= 1) return [{ dN: 0, dE: 0, hdg: null }];
+    const t = GROUP_TYPES[g.type];
+    if (t.isMovement) {
+      const groupHdgDeg = ((jrHdg + (g.mvmt === 'L' ? -90 : 90)) + 360) % 360;
+      const offsets     = [];
+      const leaderVec   = hdgVec(groupHdgDeg);
+      offsets.push({ dN: leaderVec.n * trackDistFt, dE: leaderVec.e * trackDistFt, hdg: groupHdgDeg });
+      const remaining = g.size - 1;
+      for (let i = 0; i < remaining; i++) {
+        const frac     = remaining === 1 ? 0 : i / (remaining - 1);
+        const offDeg   = -45 + frac * 90;
+        const memberHdg = (groupHdgDeg + offDeg + 360) % 360;
+        const v        = hdgVec(memberHdg);
+        offsets.push({ dN: v.n * trackDistFt, dE: v.e * trackDistFt, hdg: memberHdg });
+      }
+      return offsets;
+    }
+    // Vertical formation: distribute radially around center
+    const offsets = [];
+    for (let i = 0; i < g.size; i++) {
+      const angDeg = (i * 360) / g.size;
+      const v      = hdgVec(angDeg);
+      offsets.push({ dN: v.n * trackDistFt, dE: v.e * trackDistFt, hdg: angDeg });
+    }
+    return offsets;
+  }
+
+  // Per-group plan: physics constants for one group.
+  const plan = groups.map(g => {
+    const t      = GROUP_TYPES[g.type];
+    const ffRate = t.fallMph * 88; // ft/min
+    const dToBreakoff = integratedDrift(altExit, breakoffAlt, ffRate);
+    const dToOpen     = integratedDrift(breakoffAlt, altOpen, ffRate);
+    let movementN = 0, movementE = 0;
+    if (t.isMovement) {
+      const horizFt = (altExit - breakoffAlt) * t.glide;
+      const sign    = g.mvmt === 'L' ? -1 : 1;
+      movementN = sign * jrPerp.n * horizFt;
+      movementE = sign * jrPerp.e * horizFt;
+    }
+    const throwFt   = jrTAS * 1.689 * 2; // TAS_fps × τ (2 sec time constant)
+    const throwN    = jrVec.n * throwFt;
+    const throwE    = jrVec.e * throwFt;
+    return {
+      def: g,
+      tFreefallSec: ((altExit - breakoffAlt) / ffRate) * 60,
+      tBreakoffSec: ((breakoffAlt - altOpen) / ffRate) * 60,
+      driftToBreakoffN: dToBreakoff.dN, driftToBreakoffE: dToBreakoff.dE,
+      driftToOpenN:     dToOpen.dN,     driftToOpenE:     dToOpen.dE,
+      movementN, movementE,
+      throwN, throwE,
+      throwFt,
+      memberOffsets: memberOpeningOffsets(g),
+    };
+  });
+
+  // exit + throw + drift_to_breakoff + movement + drift_to_open = open center
+  function exitOffsetForOpen(p, openDispN, openDispE) {
+    return {
+      dN: openDispN - (p.throwN + p.driftToBreakoffN + p.movementN + p.driftToOpenN),
+      dE: openDispE - (p.throwE + p.driftToBreakoffE + p.movementE + p.driftToOpenE),
+    };
+  }
+
+  function memberOpenPositions(p, exitN, exitE) {
+    const ctrN = exitN + p.throwN + p.driftToBreakoffN + p.movementN + p.driftToOpenN;
+    const ctrE = exitE + p.throwE + p.driftToBreakoffE + p.movementE + p.driftToOpenE;
+    return p.memberOffsets.map(off => ({ dN: ctrN + off.dN, dE: ctrE + off.dE, hdg: off.hdg }));
+  }
+
+  // ── Resolve group exit positions and timing ──
+  // Group 1: open center anchored at openTarget (offset 0,0 from openTarget).
+  // Subsequent groups: exit later, aircraft moved jrGndSpdFps × tDelta along jump run.
+  const g1 = plan[0];
+  const g1Exit = exitOffsetForOpen(g1, 0, 0);
+  g1.tExitSec = 0;
+  g1.exitN = g1Exit.dN; g1.exitE = g1Exit.dE;
+  g1.openMemberPos = memberOpenPositions(g1, g1.exitN, g1.exitE);
+
+  for (let i = 1; i < plan.length; i++) {
+    const gPrev = plan[i - 1];
+    const gThis = plan[i];
+    let tDelta = exitSepFt / jrGndSpdFps;
+    let lastMin = 0;
+    for (let iter = 0; iter < 30; iter++) {
+      const exitN = gPrev.exitN + jrVec.n * jrGndSpdFps * tDelta;
+      const exitE = gPrev.exitE + jrVec.e * jrGndSpdFps * tDelta;
+      const cur   = memberOpenPositions(gThis, exitN, exitE);
+      let minDist = Infinity;
+      for (let j = 0; j < i; j++) {
+        plan[j].openMemberPos.forEach(prev => {
+          cur.forEach(c => {
+            const d = Math.hypot(c.dN - prev.dN, c.dE - prev.dE);
+            if (d < minDist) minDist = d;
+          });
+        });
+      }
+      lastMin = minDist;
+      if (minDist >= exitSepFt) break;
+      tDelta += (exitSepFt - minDist) / jrGndSpdFps + 0.1;
+    }
+    gThis.tDeltaSec = tDelta;
+    gThis.tExitSec  = gPrev.tExitSec + tDelta;
+    gThis.exitN     = gPrev.exitN + jrVec.n * jrGndSpdFps * tDelta;
+    gThis.exitE     = gPrev.exitE + jrVec.e * jrGndSpdFps * tDelta;
+    gThis.openMemberPos = memberOpenPositions(gThis, gThis.exitN, gThis.exitE);
+    gThis.minSepFt  = lastMin;
+  }
+  g1.minSepFt = Infinity; // first group has no predecessor
+
+  // Build renderer-ready result with lat/lng positions.
+  const renderedGroups = plan.map(p => {
+    const breakoffN = p.exitN + p.throwN + p.driftToBreakoffN + p.movementN;
+    const breakoffE = p.exitE + p.throwE + p.driftToBreakoffE + p.movementE;
+    const openN     = breakoffN + p.driftToOpenN;
+    const openE     = breakoffE + p.driftToOpenE;
+    return {
+      id:         p.def.id,
+      name:       p.def.name,
+      size:       p.def.size,
+      type:       p.def.type,
+      mvmt:       p.def.mvmt,
+      tExitSec:   p.tExitSec,
+      tDeltaSec:  p.tDeltaSec ?? 0,
+      tFreefall:  Math.round(p.tFreefallSec),
+      tBreakoff:  Math.round(p.tBreakoffSec),
+      throwFt:    Math.round(p.throwFt),
+      minSepFt:   isFinite(p.minSepFt) ? Math.round(p.minSepFt) : null,
+      exit:       offsetLL(openTarget.lat, openTarget.lng, p.exitN,    p.exitE),
+      breakoff:   offsetLL(openTarget.lat, openTarget.lng, breakoffN,  breakoffE),
+      openCenter: offsetLL(openTarget.lat, openTarget.lng, openN,      openE),
+      members:    p.memberOffsets.map((off, mi) => ({
+        opening:  offsetLL(openTarget.lat, openTarget.lng, openN + off.dN, openE + off.dE),
+        breakoff: offsetLL(openTarget.lat, openTarget.lng, breakoffN, breakoffE),
+        hdg:      off.hdg,
+        isLeader: mi === 0 && GROUP_TYPES[p.def.type].isMovement,
+      })),
+    };
+  });
+
+  state.freefall.result = {
+    openTarget,
+    altExit, altOpen, breakoffAlt,
+    jrHdg, jrAirspeedKts, jrGndSpdKts: Math.round(jrGndSpdKts),
+    exitSepFt,
+    groups: renderedGroups,
+  };
 }
 
 // ── Canopy pattern solver ─────────────────────────────────────────────────────
 
 /**
  * Canopy mode solver. Reads DOM inputs, computes wind-adjusted headings and turn
- * points for all legs, stores result in state.pattern. Caller (calculate()) draws.
+ * points for all legs, stores result in state.canopy.result. Caller (calculate()) draws.
  * No-op via early return if required inputs are NaN/invalid; validation errors
  * surface via setStatus(). Altitude ordering enforced with 100 ft minimum gaps.
  */
@@ -143,8 +359,8 @@ function calculateCanopyPattern() {
   if (altOpen < altF + 100) { setStatus('Opening altitude must be above pattern Final');   return; }
   if (cSpd    <= 0 || cSpd > 60)  { setStatus('Canopy speed must be between 1 and 60 kts'); return; }
   if (glide   <= 0 || glide > 10) { setStatus('Glide ratio must be between 0 and 10:1');    return; }
-  if (state.extraLegs && state.extraLegs.length > 0) {
-    const extraAlts = state.extraLegs
+  if (state.canopy.extraLegs && state.canopy.extraLegs.length > 0) {
+    const extraAlts = state.canopy.extraLegs
       .map(xl => ({ id: xl.id, alt: parseFloat(document.getElementById(`alt-${xl.id}`)?.value) || xl.defaultAlt }))
       .filter(xl => xl.alt > 0)
       .sort((a, b) => a.alt - b.alt);
@@ -158,17 +374,17 @@ function calculateCanopyPattern() {
     }
   }
 
-  let fHdgFromBar = state.finalHeadingDeg;
+  let fHdgFromBar = state.canopy.finalHeadingDeg;
   if (fHdgFromBar === null) {
     const s = state.winds.find(w => w.dirDeg !== null);
     if (!s) { setStatus('Set winds or a final heading'); return; }
     fHdgFromBar = s.dirDeg;
   }
-  const fHdg = state.legHdgOverride?.f != null ? state.legHdgOverride.f : fHdgFromBar;
+  const fHdg = state.canopy.legHdgOverride?.f != null ? state.canopy.legHdgOverride.f : fHdgFromBar;
 
   // Jump run heading: mean wind across open→exit band (better spot-drift estimate
   // than single point sample); falls back to fHdg when winds are calm.
-  let jrHdg = state.jumpRunHdgDeg;
+  let jrHdg = state.jumpRun.hdgDeg;
   if (jrHdg === null) {
     const wExit       = avgWindVec(altOpen, altExit);
     const exitWindSpd = vecLen(wExit);
@@ -257,12 +473,12 @@ function calculateCanopyPattern() {
   }
 
   // +1 = right-hand pattern (right turns), -1 = left-hand; breaks shortest-arc ambiguity.
-  const patternSign = state.hand === 'right' ? 1 : -1;
+  const patternSign = state.canopy.hand === 'right' ? 1 : -1;
 
-  const bOverride   = state.legHdgOverride?.b;
-  const dwOverride  = state.legHdgOverride?.dw;
-  const dwTrackSign = state.zPattern ? 1 : -1;
-  const isZPattern  = state.zPattern;
+  const bOverride   = state.canopy.legHdgOverride?.b;
+  const dwOverride  = state.canopy.legHdgOverride?.dw;
+  const dwTrackSign = state.canopy.zPattern ? 1 : -1;
+  const isZPattern  = state.canopy.zPattern;
   const fVec        = hdgVec(fHdg);
 
   // When an override is active, leg heading is arbitrary → use shortest path (sign=0).
@@ -271,7 +487,7 @@ function calculateCanopyPattern() {
   const avgCSpdDB  = (perfDW.cSpd + perfB.cSpd)  / 2;
   const avgGlideDB = (perfDW.glide + perfB.glide)/ 2;
   const bfSign = bOverride != null ? 0 : patternSign;
-  const dbSign = (dwOverride != null || bOverride != null || state.zPattern) ? 0 : patternSign;
+  const dbSign = (dwOverride != null || bOverride != null || state.canopy.zPattern) ? 0 : patternSign;
 
   // Solves all three standard legs; returns bundle of results or null if unflyable.
   function solveLegs(altFs, altBs) {
@@ -279,20 +495,20 @@ function calculateCanopyPattern() {
     const fStillFt = altFs * perfF.glide;
     const tF       = altFs / (dRateF * tasFactor(altFs / 2));
     const wF       = avgWindVec(0, altFs);
-    const rF       = solveleg(state.legModes.f, fVec.n, fVec.e, fStillFt, wF, tF, fHdg);
+    const rF       = solveleg(state.canopy.legModes.f, fVec.n, fVec.e, fStillFt, wF, tF, fHdg);
     if (rF === null) return null;
-    const fHdgActual = state.legModes.f === 'crab' ? rF.hdg : fHdg;
+    const fHdgActual = state.canopy.legModes.f === 'crab' ? rF.hdg : fHdg;
     const fDisp      = rF.disp;
     const fTrackUnit = normalize({n: fDisp.dN, e: fDisp.dE});
 
     // Base leg: altBs → altF
-    const bTN = bOverride != null ? hdgVec(bOverride).n : (state.hand === 'left' ? -fTrackUnit.e :  fTrackUnit.e);
-    const bTE = bOverride != null ? hdgVec(bOverride).e : (state.hand === 'left' ?  fTrackUnit.n : -fTrackUnit.n);
+    const bTN = bOverride != null ? hdgVec(bOverride).n : (state.canopy.hand === 'left' ? -fTrackUnit.e :  fTrackUnit.e);
+    const bTE = bOverride != null ? hdgVec(bOverride).e : (state.canopy.hand === 'left' ?  fTrackUnit.n : -fTrackUnit.n);
     const bStillFt = (altBs - altF) * perfB.glide;
     const tB       = (altBs - altF) / (dRateB * tasFactor((altBs + altF) / 2));
     const wB       = avgWindVec(altF, altBs);
-    const bNomHdg  = bOverride ?? (state.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
-    const rB       = solveleg(state.legModes.b, bTN, bTE, bStillFt, wB, tB, bNomHdg);
+    const bNomHdg  = bOverride ?? (state.canopy.hand === 'left' ? (fHdg + 90) % 360 : (fHdg - 90 + 360) % 360);
+    const rB       = solveleg(state.canopy.legModes.b, bTN, bTE, bStillFt, wB, tB, bNomHdg);
     if (rB === null) return null;
 
     // Downwind leg: altE → altB (turn-consumed altitude happens BELOW this band)
@@ -301,8 +517,8 @@ function calculateCanopyPattern() {
     const dStillFt = (altE - altB) * perfDW.glide;
     const tD       = (altE - altB) / (dRateDW * tasFactor((altE + altB) / 2));
     const wD       = avgWindVec(altB, altE);
-    const dwNomHdg = dwOverride ?? (state.zPattern ? fHdg : (fHdg + 180) % 360);
-    const rDW      = solveleg(state.legModes.dw, dwTN, dwTE, dStillFt, wD, tD, dwNomHdg);
+    const dwNomHdg = dwOverride ?? (state.canopy.zPattern ? fHdg : (fHdg + 180) % 360);
+    const rDW      = solveleg(state.canopy.legModes.dw, dwTN, dwTE, dStillFt, wD, tD, dwNomHdg);
     if (rDW === null) return null;
 
     return {
@@ -373,7 +589,7 @@ function calculateCanopyPattern() {
     let topAlt   = altE;
 
     // Sort lowest extra altitude first so we chain correctly upward
-    const extrasSorted = [...(state.extraLegs || [])]
+    const extrasSorted = [...(state.canopy.extraLegs || [])]
       .map(xl => ({ ...xl, alt: parseFloat(document.getElementById(`alt-${xl.id}`)?.value) || xl.defaultAlt }))
       .filter(xl => xl.alt > 0)
       .sort((a, b) => a.alt - b.alt);
@@ -386,7 +602,7 @@ function calculateCanopyPattern() {
 
       const xlPerf  = getLegPerf(xl.id);
       const dRateXL = (xlPerf.cSpd / xlPerf.glide) * FT_MIN_PER_KT;
-      const xlMode  = state.legModes[xl.id] || 'crab';
+      const xlMode  = state.canopy.legModes[xl.id] || 'crab';
 
       // Approach heading is user-specified via the per-leg heading input
       const nomHdg = ((parseFloat(document.getElementById(`hdg-${xl.id}`)?.value) || 0) + 3600) % 360;
@@ -493,7 +709,7 @@ function calculateCanopyPattern() {
   const dWC = {along: dwAlong, cross: dwCross};
   const bWC = {along: bAlong,  cross: bCross};
 
-  state.pattern = {
+  state.canopy.result = {
     entry, tBase, tFinal, landing: state.target,
     tBaseTurnStart, tFinalTurnStart,
     turnBF, turnDB,

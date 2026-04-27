@@ -111,6 +111,13 @@
     </div>
     <div id="legs-container"></div>
 
+    <div class="section-label section-label--action">
+      <span>Jump Run Groups</span>
+      <button class="add-leg-btn" onclick="addGroup()">+ Add Group</button>
+    </div>
+    <div id="groups-container"></div>
+    <div class="field-note field-note-sm">Groups are listed in exit order (first to last out the door). Movement groups fly perpendicular to jump run; vertical groups (FS/VFS/Student/Tandem) fall straight down. Tracking from breakoff to opening: 1:1 glide ratio.</div>
+
     <div class="section-label">Default Canopy Performance (still air, no wind)</div>
     <div class="input-grid">
       <div class="input-group">
@@ -242,10 +249,10 @@
     <button class="overlay-close" onclick="closeOverlay('labels')">✕</button>
   </div>
   <div class="overlay-body">
-    <div class="field-note field-note-mb">Toggle pattern modes and map layers.</div>
+    <div class="field-note field-note-mb">Toggle planner modes and map layers.</div>
     <div class="layers-list">
 
-      <div class="layer-section-header">Pattern Modes</div>
+      <div class="layer-section-header">Planner Modes</div>
       <div class="layer-row">
         <span class="layer-label">Canopy</span>
         <div id="mode-canopy" class="layer-toggle active" onclick="toggleMode('canopy')" role="button" tabindex="0" aria-label="Toggle canopy mode">On</div>
@@ -285,6 +292,16 @@
       <div class="layer-row">
         <span class="layer-label">Leg Arrows</span>
         <div id="layer-legArrows" class="layer-toggle active" onclick="toggleLayer('legArrows')" role="button" tabindex="0" aria-label="Toggle leg arrows layer">On</div>
+      </div>
+
+      <div class="layer-section-header">Freefall</div>
+      <div class="layer-row">
+        <span class="layer-label">Group Paths</span>
+        <div id="layer-freefallPaths" class="layer-toggle active" onclick="toggleLayer('freefallPaths')" role="button" tabindex="0" aria-label="Toggle freefall paths layer">On</div>
+      </div>
+      <div class="layer-row">
+        <span class="layer-label">Group Labels</span>
+        <div id="layer-freefallLabels" class="layer-toggle active" onclick="toggleLayer('freefallLabels')" role="button" tabindex="0" aria-label="Toggle freefall labels layer">On</div>
       </div>
 
       <div class="layer-section-header">Other</div>
@@ -530,6 +547,7 @@
 <script src="js/ui-heading.js"></script>
 <script src="js/ui-canopy.js"></script>
 <script src="js/ui-legs.js"></script>
+<script src="js/ui-groups.js"></script>
 <script src="js/search.js"></script>
 <script src="js/app.js"></script>
 <script src="js/ui-forecast.js"></script>

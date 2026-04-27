@@ -59,7 +59,7 @@ const INTERP_ALTS_FT = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10
 
 // ── Leg definitions — drives the rendered leg cards in the settings overlay ──
 // Adding an entry here automatically adds a leg card to the UI.
-// `key` must match state.legModes and element ID prefixes (e.g. dw-crab, dw-glide).
+// `key` must match state.canopy.legModes and element ID prefixes (e.g. dw-crab, dw-glide).
 // `altId` must match PERSIST_INPUTS and calculate.js element reads.
 // Colors for dynamically added extra legs (cycles if more than 5)
 const EXTRA_LEG_COLORS = ['#c084fc', '#60a5fa', '#fb923c', '#34d399', '#f472b6'];
