@@ -71,13 +71,19 @@ function safeWC(w, unitVec) {
   return Math.round(w.n * unitVec.n + w.e * unitVec.e);
 }
 
-// Freefall speed (mph) derived from the mandatory first group's type.
+// Freefall speed (mph) for group 1: uses per-group vSpeedMph if set, else type default.
 // Used by the canopy exit-ring calc; falls back to FS belly (120 mph) if no groups exist.
 function firstGroupFallMph() {
   const g0 = state.freefall.groups[0];
   if (!g0) return 120;
+  if (g0.vSpeedMph != null) return g0.vSpeedMph;
   const t = GROUP_TYPES[g0.type];
   return t ? t.fallMph : 120;
+}
+
+// Opening altitude for group 1 — used by canopy calc for exit ring and validation.
+function firstGroupOpenAlt() {
+  return state.freefall.groups[0]?.openAlt ?? 3000;
 }
 
 // ── Main entry: mode dispatcher ───────────────────────────────────────────────
@@ -204,53 +210,50 @@ function integrateTrackToOpening(altTopAGL, altBotAGL, vTermSL_fps, trackHdgDeg,
 // ── Freefall (jump run) planner ───────────────────────────────────────────────
 
 /**
- * Per-group freefall + tracking solver. For each group exits → breakoff → opening,
- * computes group center positions plus per-jumper opening positions accounting for
- * exit throw, integrated wind drift, and (for movement groups) glide-path movement.
- * Iterates exit timing so every member of every group is ≥ exitSepFt from every
- * other member at opening altitude.
+ * Per-group freefall + tracking solver. Each group has its own openAlt, breakoffAlt,
+ * and vSpeedMph. The MIDDLE group (by index) exits at the center of the exit circle
+ * (jrBase); groups before it exit upwind (earlier), groups after it exit downwind.
+ * Spacing is iterated so every member of every pair of groups is ≥ openSepFt apart
+ * at their respective opening altitudes.
  *
- * All groups exit along the jump run line: a single line through jrBase (the
- * pure-vertical-descent exit center, optionally shifted by the manual JR offset)
- * parallel to jrVec. Group #1's along-track exit position is chosen so its
- * average-member open lands at the target's along-track position; perpendicular
- * displacement of opens reflects whatever the physics produces (e.g. movement
- * glide for movement groups). Subsequent groups exit later along the same line.
+ * Jump run heading comes from avg winds between exitAlt and group #1's openAlt.
+ * jrBase is computed from the middle group's vertical speed and openAlt.
  *
- * Physics (see integrateFreefallExitToBreakoff and integrateTrackToOpening):
- *  · Exit→breakoff: quadratic drag with k/m = g/v_t², coupled forward+vertical ODE,
- *    integrated at FF_DT_SEC steps. Initial forward speed = aircraft TAS at exit.
- *    Movement groups carry sustained lateral airmass velocity v·glide along jrPerp;
- *    the resulting path curves as forward throw decays and lateral glide grows in.
- *  · Breakoff→opening: per-member track at terminal vertical (density-corrected),
- *    horizontal at v_t × TRACK_GR along each member's chosen heading. Vertical
- *    formations radiate 360° from group center; movement members fan evenly
- *    within ±45° of group heading. Solo (size=1) does not track.
+ * An intra-group tracking separation check is run for each group: if members cannot
+ * spread at least openSepFt apart during breakoff→open tracking, the required
+ * breakoffAlt is reported as `reqBreakoffAlt` on the group result.
  */
 function calculateFreefallPlan() {
   const groups = state.freefall.groups;
   if (!groups || !groups.length) { state.freefall.result = null; return; }
 
   const altExit = parseFloat(document.getElementById('alt-exit').value);
-  const altOpen = parseFloat(document.getElementById('alt-open').value);
-  if (!isFinite(altExit) || !isFinite(altOpen)) { state.freefall.result = null; return; }
-
-  const breakoffAlt = altOpen + 1000;
-  if (altExit <= breakoffAlt + 100) {
-    setStatus('Exit altitude must be ≥1000 ft above breakoff (opening + 1000)');
-    state.freefall.result = null;
-    return;
-  }
+  if (!isFinite(altExit)) { state.freefall.result = null; return; }
 
   const jrAirspeedKts = parseFloat(document.getElementById('jr-airspeed').value) || 80;
-  const exitSepFt     = parseFloat(document.getElementById('exit-sep').value)    || 1500;
+  const openSepFt     = parseFloat(document.getElementById('exit-sep').value)    || 1500;
 
-  // Jump run heading: prefer state.jumpRun.hdgDeg (canopy may have set it); else from
-  // mean wind across exit→open band, else 0. Sync DOM display when we computed it
-  // ourselves so the JR heading slider stays accurate when canopy mode is off.
+  // Validate every group's altitudes
+  for (const g of groups) {
+    const ga = g.openAlt     ?? DEFAULT_OPEN_ALT[g.type] ?? 3000;
+    const gb = g.breakoffAlt ?? (ga + 1500);
+    if (altExit <= gb + 100) {
+      setStatus(`Exit altitude must be ≥100 ft above breakoff for ${g.name}`);
+      state.freefall.result = null;
+      return;
+    }
+    if (gb <= ga + 100) {
+      setStatus(`Breakoff must be ≥100 ft above opening for ${g.name}`);
+      state.freefall.result = null;
+      return;
+    }
+  }
+
+  // Jump run heading: avg wind from exitAlt down to group #1's openAlt.
+  const g0OpenAlt = groups[0].openAlt ?? DEFAULT_OPEN_ALT[groups[0].type] ?? 3000;
   let jrHdg = state.jumpRun.hdgDeg;
   if (jrHdg == null) {
-    const wExit = avgWindVec(altOpen, altExit);
+    const wExit = avgWindVec(g0OpenAlt, altExit);
     if (vecLen(wExit) > MIN_WIND_SPD_KT) {
       const windVelDir = (Math.atan2(wExit.e, wExit.n) * R2D + 360) % 360;
       jrHdg = (windVelDir + 180) % 360;
@@ -269,23 +272,26 @@ function calculateFreefallPlan() {
   const jrPerp = { n: -jrVec.e, e: jrVec.n };  // 90° right of jump run (compass right)
 
   // Aircraft ground speed along jump run (TAS at exit alt + along-track wind component)
-  const wJr        = getWindAtAGL(altExit);
-  const jrTAS      = jrAirspeedKts * tasFactor(altExit);
-  const jrAlongWC  = wJr.n * jrVec.n + wJr.e * jrVec.e;
+  const wJr         = getWindAtAGL(altExit);
+  const jrTAS       = jrAirspeedKts * tasFactor(altExit);
+  const jrAlongWC   = wJr.n * jrVec.n + wJr.e * jrVec.e;
   const jrGndSpdKts = Math.max(1, jrTAS + jrAlongWC);
   const jrGndSpdFps = jrGndSpdKts * FPS_PER_KT;
 
-  // Anchor: landing target is where group #1 opens.
-  const openTarget = state.target;
+  const openTarget  = state.target;
 
-  // Jump run line anchor: pure-vertical-descent exit point (relative to openTarget),
-  // optionally shifted perpendicular by manual JR offset. All groups exit ALONG this line.
-  const ffSpeedMph     = firstGroupFallMph();
-  const ffRateFtMin    = ffSpeedMph * 88;                              // mph → ft/min
-  const ffDriftAnchor  = integratedDrift(altExit, altOpen, ffRateFtMin);
-  let   jrBaseN        = -ffDriftAnchor.dN;
-  let   jrBaseE        = -ffDriftAnchor.dE;
-  const jrOffsetEl     = document.getElementById('jr-offset');
+  // jrBase: computed from the MIDDLE group's physics so that group exits at circle center.
+  const middleIdx      = Math.floor(groups.length / 2);
+  const midGroup       = groups[middleIdx];
+  const midOpenAlt     = midGroup.openAlt     ?? DEFAULT_OPEN_ALT[midGroup.type] ?? 3000;
+  const midVSpeedMph   = midGroup.vSpeedMph   ?? GROUP_TYPES[midGroup.type]?.fallMph ?? 120;
+  const midFfRateFtMin = midVSpeedMph * 88;
+  const midDriftAnchor = integratedDrift(altExit, midOpenAlt, midFfRateFtMin);
+  let   jrBaseN        = -midDriftAnchor.dN;
+  let   jrBaseE        = -midDriftAnchor.dE;
+
+  // Apply manual JR offset (perpendicular shift)
+  const jrOffsetEl = document.getElementById('jr-offset');
   if (state.jumpRun.manualOffset && jrOffsetEl && jrOffsetEl.value !== '') {
     const userOffsetNm = parseFloat(jrOffsetEl.value) || 0;
     const calcOffsetFt = jrBaseN * jrPerp.n + jrBaseE * jrPerp.e;
@@ -294,9 +300,7 @@ function calculateFreefallPlan() {
     jrBaseE += jrPerp.e * dOffsetFt;
   }
 
-  // Per-member tracking heading list for a group (used for breakoff→open integration).
-  // Movement groups: all members fan evenly within ±45° of group heading (forward fan).
-  // Vertical groups: members radiate 360° from group center.
+  // Per-member tracking heading list for breakoff→open integration.
   function memberTrackHeadings(g) {
     if (g.size <= 1) return [null];
     const t = GROUP_TYPES[g.type];
@@ -315,10 +319,13 @@ function calculateFreefallPlan() {
     return hdgs;
   }
 
-  // Per-group plan: physics-integrated trajectories from exit → breakoff → open.
+  // Per-group physics — each group uses its own openAlt, breakoffAlt, vSpeedMph.
   const plan = groups.map(g => {
     const t          = GROUP_TYPES[g.type];
-    const vTermSL    = t.fallMph * FPS_PER_MPH;
+    const openAlt    = g.openAlt     ?? DEFAULT_OPEN_ALT[g.type] ?? 3000;
+    const breakoffAlt = g.breakoffAlt ?? (openAlt + 1500);
+    const vSpeedMph  = g.vSpeedMph   ?? t.fallMph;
+    const vTermSL    = vSpeedMph * FPS_PER_MPH;
     const latSign    = t.isMovement ? (g.mvmt === 'L' ? -1 : 1) : 0;
     const latGlide   = t.isMovement ? t.glide : 0;
     const ff         = integrateFreefallExitToBreakoff(
@@ -327,23 +334,49 @@ function calculateFreefallPlan() {
     const trackHdgs  = memberTrackHeadings(g);
     const memberLegs = trackHdgs.map(hdg => {
       if (hdg === null) return { dN: 0, dE: 0, tSec: 0, hdg: null };
-      const tr = integrateTrackToOpening(breakoffAlt, altOpen, vTermSL, hdg, TRACK_GR);
+      const tr = integrateTrackToOpening(breakoffAlt, openAlt, vTermSL, hdg, TRACK_GR);
       return { dN: tr.dN, dE: tr.dE, tSec: tr.tSec, hdg };
     });
+
+    // Intra-group tracking separation check.
+    // Required spread: 2 × trackBand × sin(halfAngle) ≥ openSepFt.
+    // trackBand ≈ (breakoffAlt - openAlt) × TRACK_GR (1:1 glide ratio).
+    let reqBreakoffAlt = null;
+    if (g.size >= 2) {
+      const trackBand = (breakoffAlt - openAlt) * TRACK_GR;
+      let halfAngle;
+      if (t.isMovement) {
+        // members span ±45° (total 90°) evenly; adjacent angular gap = 90/(N-1)°
+        const angGapDeg = g.size === 2 ? 90 : 90 / (g.size - 1);
+        halfAngle = (angGapDeg / 2) * D2R;
+      } else {
+        // members spread 360°/N apart
+        halfAngle = Math.PI / g.size;
+      }
+      const sin_h = Math.sin(halfAngle);
+      if (sin_h > 0) {
+        const actualSep = 2 * trackBand * sin_h;
+        if (actualSep < openSepFt) {
+          const reqBand    = openSepFt / (2 * sin_h);
+          reqBreakoffAlt   = Math.ceil(openAlt + reqBand / TRACK_GR);
+        }
+      }
+    }
+
     return {
       def: g,
+      openAlt, breakoffAlt,
       tFreefallSec: ff.tSec,
       tBreakoffSec: memberLegs[0].tSec,
-      breakoffDispN: ff.dN, breakoffDispE: ff.dE,    // exit → breakoff (incl. drift + throw)
-      throwN: ff.throwN,    throwE: ff.throwE,       // airmass-only forward + lateral
+      breakoffDispN: ff.dN, breakoffDispE: ff.dE,
+      throwN: ff.throwN, throwE: ff.throwE,
       throwFt: ff.throwFt,
-      ffPathPoints: ff.pathPoints,                   // sampled exit→breakoff trajectory (curved)
-      memberLegs,                                    // per-member breakoff → open vector
+      ffPathPoints: ff.pathPoints,
+      memberLegs,
+      reqBreakoffAlt,
     };
   });
 
-  // Average member breakoff→open displacement (used for along-track exit positioning
-  // and rendering the group's opening center).
   function avgMemberOpenDisp(p) {
     const n = p.memberLegs.length;
     let sN = 0, sE = 0;
@@ -361,38 +394,26 @@ function calculateFreefallPlan() {
     }));
   }
 
-  // ── Resolve group exit positions and timing ──
-  // ALL groups exit along the jump run line (passing through jrBase along jrVec).
-  // Group 1: along-track position chosen so group avg-open is at openTarget along-track.
-  //   Perpendicular offset from openTarget = whatever the lateral physics produces (e.g.
-  //   movement glide for movement groups).
-  // Subsequent groups: aircraft moves jrGndSpdFps × tDelta further along jump run line.
-  // Spacing: tDelta is increased until every member of this group is ≥ exitSepFt from
-  // every member of every previous group at opening altitude.
-  const g1 = plan[0];
-  {
-    const avg = avgMemberOpenDisp(g1);
-    // Place exit on JR line so along-track open position matches openTarget (along = 0).
-    // exit = jrBase + alpha*jrVec; require along(exit + breakoffDisp + avg) = 0.
-    const openDispN = g1.breakoffDispN + avg.dN;
-    const openDispE = g1.breakoffDispE + avg.dE;
-    const alpha     = -((jrBaseN + openDispN) * jrVec.n + (jrBaseE + openDispE) * jrVec.e);
-    g1.tExitSec = 0;
-    g1.exitN    = jrBaseN + alpha * jrVec.n;
-    g1.exitE    = jrBaseE + alpha * jrVec.e;
-    g1.openMemberPos = memberOpenPositions(g1, g1.exitN, g1.exitE);
-  }
+  // ── Position middle group at jrBase ──
+  // Middle group's exit is at jrBaseN/jrBaseE (the natural center of the exit circle).
+  // tExitSec = 0 for middle group (reference). Groups before it have negative times
+  // (exit earlier), groups after have positive times (exit later).
+  plan[middleIdx].tExitSec      = 0;
+  plan[middleIdx].exitN         = jrBaseN;
+  plan[middleIdx].exitE         = jrBaseE;
+  plan[middleIdx].openMemberPos = memberOpenPositions(plan[middleIdx], jrBaseN, jrBaseE);
+  plan[middleIdx].minSepFt      = null; // resolved below
 
-  for (let i = 1; i < plan.length; i++) {
+  // ── Solve spacing for groups AFTER middle (forward in time = downwind) ──
+  for (let i = middleIdx + 1; i < plan.length; i++) {
     const gPrev = plan[i - 1];
     const gThis = plan[i];
-    let tDelta = exitSepFt / jrGndSpdFps;
+    let tDelta  = openSepFt / jrGndSpdFps;
     let lastMin = 0;
     for (let iter = 0; iter < 50; iter++) {
       const exitN = gPrev.exitN + jrVec.n * jrGndSpdFps * tDelta;
       const exitE = gPrev.exitE + jrVec.e * jrGndSpdFps * tDelta;
       const cur   = memberOpenPositions(gThis, exitN, exitE);
-      // Min distance to ANY member of ANY previous group at opening altitude.
       let minDist = Infinity;
       for (let j = 0; j < i; j++) {
         plan[j].openMemberPos.forEach(prev => {
@@ -403,19 +424,58 @@ function calculateFreefallPlan() {
         });
       }
       lastMin = minDist;
-      if (minDist >= exitSepFt) break;
-      tDelta += (exitSepFt - minDist) / jrGndSpdFps + 0.1;
+      if (minDist >= openSepFt) break;
+      tDelta += (openSepFt - minDist) / jrGndSpdFps + 0.1;
     }
-    gThis.tDeltaSec = tDelta;
-    gThis.tExitSec  = gPrev.tExitSec + tDelta;
-    gThis.exitN     = gPrev.exitN + jrVec.n * jrGndSpdFps * tDelta;
-    gThis.exitE     = gPrev.exitE + jrVec.e * jrGndSpdFps * tDelta;
-    gThis.openMemberPos = memberOpenPositions(gThis, gThis.exitN, gThis.exitE);
-    gThis.minSepFt  = lastMin;
+    gThis.tDeltaSec      = tDelta;
+    gThis.tExitSec       = gPrev.tExitSec + tDelta;
+    gThis.exitN          = gPrev.exitN + jrVec.n * jrGndSpdFps * tDelta;
+    gThis.exitE          = gPrev.exitE + jrVec.e * jrGndSpdFps * tDelta;
+    gThis.openMemberPos  = memberOpenPositions(gThis, gThis.exitN, gThis.exitE);
+    gThis.minSepFt       = lastMin;
   }
-  g1.minSepFt = Infinity; // first group has no predecessor
 
-  // Build renderer-ready result with lat/lng positions.
+  // ── Solve spacing for groups BEFORE middle (backward in time = upwind) ──
+  for (let i = middleIdx - 1; i >= 0; i--) {
+    const gNext = plan[i + 1];
+    const gThis = plan[i];
+    let tDelta  = openSepFt / jrGndSpdFps;
+    let lastMin = 0;
+    for (let iter = 0; iter < 50; iter++) {
+      // This group exits tDelta seconds BEFORE the next group along JR
+      const exitN = gNext.exitN - jrVec.n * jrGndSpdFps * tDelta;
+      const exitE = gNext.exitE - jrVec.e * jrGndSpdFps * tDelta;
+      const cur   = memberOpenPositions(gThis, exitN, exitE);
+      // Check against ALL groups with higher index (they all exit after this one)
+      let minDist = Infinity;
+      for (let j = i + 1; j < plan.length; j++) {
+        plan[j].openMemberPos.forEach(prev => {
+          cur.forEach(c => {
+            const d = Math.hypot(c.dN - prev.dN, c.dE - prev.dE);
+            if (d < minDist) minDist = d;
+          });
+        });
+      }
+      lastMin = minDist;
+      if (minDist >= openSepFt) break;
+      tDelta += (openSepFt - minDist) / jrGndSpdFps + 0.1;
+    }
+    gThis.tDeltaSec     = tDelta;    // gap to the next group in exit order
+    gThis.tExitSec      = gNext.tExitSec - tDelta;
+    gThis.exitN         = gNext.exitN - jrVec.n * jrGndSpdFps * tDelta;
+    gThis.exitE         = gNext.exitE - jrVec.e * jrGndSpdFps * tDelta;
+    gThis.openMemberPos = memberOpenPositions(gThis, gThis.exitN, gThis.exitE);
+    gThis.minSepFt      = lastMin;
+  }
+
+  // Normalize tExitSec so first exit (minimum) = 0.
+  const minT = Math.min(...plan.map(p => p.tExitSec));
+  plan.forEach(p => { p.tExitSec -= minT; });
+
+  // Max tDeltaSec between consecutive groups (for display as "sep Xs")
+  const maxTDelta = plan.reduce((mx, p) => Math.max(mx, p.tDeltaSec ?? 0), 0);
+
+  // Build renderer-ready result.
   const renderedGroups = plan.map(p => {
     const breakoffN = p.exitN + p.breakoffDispN;
     const breakoffE = p.exitE + p.breakoffDispE;
@@ -423,27 +483,30 @@ function calculateFreefallPlan() {
     const openN     = breakoffN + avg.dN;
     const openE     = breakoffE + avg.dE;
     const isMv      = GROUP_TYPES[p.def.type].isMovement;
-    // Curved exit→breakoff path: rebase sampled offsets relative to the actual exit.
     const ffPath    = (p.ffPathPoints || []).map(pp =>
       offsetLL(openTarget.lat, openTarget.lng, p.exitN + pp.dN, p.exitE + pp.dE)
     );
     return {
-      id:         p.def.id,
-      name:       p.def.name,
-      size:       p.def.size,
-      type:       p.def.type,
-      mvmt:       p.def.mvmt,
-      tExitSec:   p.tExitSec,
-      tDeltaSec:  p.tDeltaSec ?? 0,
-      tFreefall:  Math.round(p.tFreefallSec),
-      tBreakoff:  Math.round(p.tBreakoffSec),
-      throwFt:    Math.round(p.throwFt),
-      minSepFt:   isFinite(p.minSepFt) ? Math.round(p.minSepFt) : null,
-      exit:       offsetLL(openTarget.lat, openTarget.lng, p.exitN,    p.exitE),
-      breakoff:   offsetLL(openTarget.lat, openTarget.lng, breakoffN,  breakoffE),
-      openCenter: offsetLL(openTarget.lat, openTarget.lng, openN,      openE),
-      ffPath,                                        // curved exit→breakoff trajectory
-      members:    p.memberLegs.map((m, mi) => ({
+      id:             p.def.id,
+      name:           p.def.name,
+      size:           p.def.size,
+      type:           p.def.type,
+      mvmt:           p.def.mvmt,
+      openAlt:        p.openAlt,
+      breakoffAlt:    p.breakoffAlt,
+      tExitSec:       p.tExitSec,
+      tDeltaSec:      p.tDeltaSec ?? 0,
+      tFreefall:      Math.round(p.tFreefallSec),
+      tBreakoff:      Math.round(p.tBreakoffSec),
+      throwFt:        Math.round(p.throwFt),
+      minSepFt:       p.minSepFt != null && isFinite(p.minSepFt) ? Math.round(p.minSepFt) : null,
+      reqBreakoffAlt: p.reqBreakoffAlt,
+      isMiddle:       (groups.indexOf(p.def) === middleIdx),
+      exit:           offsetLL(openTarget.lat, openTarget.lng, p.exitN,   p.exitE),
+      breakoff:       offsetLL(openTarget.lat, openTarget.lng, breakoffN, breakoffE),
+      openCenter:     offsetLL(openTarget.lat, openTarget.lng, openN,     openE),
+      ffPath,
+      members: p.memberLegs.map((m, mi) => ({
         opening:  offsetLL(openTarget.lat, openTarget.lng, breakoffN + m.dN, breakoffE + m.dE),
         breakoff: offsetLL(openTarget.lat, openTarget.lng, breakoffN, breakoffE),
         hdg:      m.hdg,
@@ -452,11 +515,15 @@ function calculateFreefallPlan() {
     };
   });
 
+  // Compute jrBase lat/lng for renderer (to draw the jump run line/circle)
+  const jrBasePt = offsetLL(openTarget.lat, openTarget.lng, jrBaseN, jrBaseE);
+
   state.freefall.result = {
     openTarget,
-    altExit, altOpen, breakoffAlt,
+    altExit,
     jrHdg, jrAirspeedKts, jrGndSpdKts: Math.round(jrGndSpdKts),
-    exitSepFt,
+    openSepFt, maxTDelta,
+    jrBasePt,
     groups: renderedGroups,
   };
 }
@@ -477,7 +544,6 @@ function calculateCanopyPattern() {
   const altF   = parseFloat(document.getElementById('alt-final').value);
 
   const _altExit    = parseFloat(document.getElementById('alt-exit').value);
-  const _altOpen    = parseFloat(document.getElementById('alt-open').value);
   const _safety     = parseFloat(document.getElementById('safety-margin').value);
   const _jrAirspeed = parseFloat(document.getElementById('jr-airspeed').value);
   const _exitSep    = parseFloat(document.getElementById('exit-sep').value);
@@ -486,7 +552,7 @@ function calculateCanopyPattern() {
   const bankRad = bankDeg * D2R;
 
   const altExit       = isNaN(_altExit)    ? 13500 : _altExit;
-  const altOpen       = isNaN(_altOpen)    ? 3000  : _altOpen;
+  const altOpen       = firstGroupOpenAlt();  // per-group opening alt from group #1
   // First group's type sets freefall speed for the exit ring calculation.
   const ffSpeedMph    = firstGroupFallMph();
   const safetyPct     = (isNaN(_safety)   ? 0     : _safety) / 100;
@@ -530,8 +596,7 @@ function calculateCanopyPattern() {
   }
   const fHdg = state.canopy.legHdgOverride?.f != null ? state.canopy.legHdgOverride.f : fHdgFromBar;
 
-  // Jump run heading: mean wind across open→exit band (better spot-drift estimate
-  // than single point sample); falls back to fHdg when winds are calm.
+  // Jump run heading: mean wind across group1.openAlt→exit (same as freefall solver).
   let jrHdg = state.jumpRun.hdgDeg;
   if (jrHdg === null) {
     const wExit       = avgWindVec(altOpen, altExit);

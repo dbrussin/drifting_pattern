@@ -113,80 +113,116 @@ function freefallDot(color, size = 9) {
 
 /**
  * Render the freefall plan from state.freefall.result.
- * For each group:
- *  - exit point marker (square-ish dot) + label with name, size, exit time
- *  - line from exit to group breakoff center (freefall path)
- *  - line from breakoff center to each member's opening point (tracking path)
- *  - opening point markers per member
- * All positions are precomputed by calculateFreefallPlan().
+ * For each group: exit marker + label, freefall path, tracking spread, opening markers.
+ * Also draws a jump run line through all exit points with timing/speed label,
+ * and highlights the middle group's exit (center of exit circle).
+ * Groups with insufficient breakoff altitude for intra-group separation get a warning.
  */
 function drawFreefallPlan() {
   const r = state.freefall.result;
   if (!r || !r.groups || !r.groups.length) return;
   const showPaths  = state.layers.freefallPaths !== false;
   const showLabels = state.layers.freefallLabels !== false;
+  const shadow     = '0 1px 4px #000,0 0 8px #000';
 
   r.groups.forEach((g, gi) => {
     const color = FREEFALL_GROUP_COLORS[gi % FREEFALL_GROUP_COLORS.length];
 
     if (showPaths) {
-      // Exit → breakoff (group center freefall path).
-      // Movement groups curve as the throw decays and lateral glide grows in;
-      // vertical groups fall nearly straight down (path collapses to ~2 points).
       const pathLatLngs = (g.ffPath && g.ffPath.length >= 2)
         ? g.ffPath.map(ll)
         : [ll(g.exit), ll(g.breakoff)];
-      addL(L.polyline(pathLatLngs, {
-        color, weight: 2.5, opacity: 0.85, dashArray: '6 4',
-      }));
-      // Breakoff → each member's opening point (tracking spread)
+      addL(L.polyline(pathLatLngs, { color, weight: 2.5, opacity: 0.85, dashArray: '6 4' }));
       g.members.forEach(m => {
-        addL(L.polyline([ll(m.breakoff), ll(m.opening)], {
-          color, weight: 1.5, opacity: 0.7,
-        }));
+        addL(L.polyline([ll(m.breakoff), ll(m.opening)], { color, weight: 1.5, opacity: 0.7 }));
       });
     }
 
-    // Markers — exit, breakoff, opening points
-    addL(L.marker(ll(g.exit),     { icon: freefallDot(color, 11), zIndexOffset: 110 }));
-    addL(L.marker(ll(g.breakoff), { icon: freefallDot(color, 7),  zIndexOffset: 95 }));
+    // Exit marker: larger for middle group (center of exit circle)
+    const exitSize = g.isMiddle ? 14 : 11;
+    addL(L.marker(ll(g.exit),     { icon: freefallDot(color, exitSize), zIndexOffset: 110 }));
+    addL(L.marker(ll(g.breakoff), { icon: freefallDot(color, 7),        zIndexOffset: 95  }));
     g.members.forEach(m => {
       addL(L.marker(ll(m.opening), { icon: freefallDot(color, 7), zIndexOffset: 100 }));
     });
 
     if (showLabels) {
-      const tExit = g.tExitSec >= 0 ? `+${Math.round(g.tExitSec)}s` : `${Math.round(g.tExitSec)}s`;
+      const tSec  = Math.round(g.tExitSec);
+      const tTxt  = `+${tSec}s`;
       const sepTxt = g.minSepFt != null ? ` · sep ${g.minSepFt}ft` : '';
-      const exitLbl = `${g.name} (${g.size}× ${g.type})\n${tExit} · throw ${g.throwFt}ft${sepTxt}`;
+      const midTxt = g.isMiddle ? ' ●' : '';
+      const line1  = `${g.name} (${g.size}× ${g.type})${midTxt}`;
+      const line2  = `${tTxt} · open ${g.openAlt}ft · brk ${g.breakoffAlt}ft · throw ${g.throwFt}ft${sepTxt}`;
       addL(L.marker(ll(g.exit), {
         icon: L.divIcon({
           html: `<div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;
-            color:${color};text-shadow:0 1px 4px #000,0 0 8px #000;white-space:pre;
-            pointer-events:none;text-align:left;line-height:1.3;padding-left:14px;">${exitLbl}</div>`,
-          iconSize: [200, 32], iconAnchor: [0, 16], className: '',
+            color:${color};text-shadow:${shadow};white-space:pre;
+            pointer-events:none;text-align:left;line-height:1.3;padding-left:14px;">${line1}\n${line2}</div>`,
+          iconSize: [320, 38], iconAnchor: [0, 19], className: '',
         }),
         interactive: false, zIndexOffset: 50,
       }));
+
+      // Breakoff-altitude warning: insufficient intra-group tracking spread
+      if (g.reqBreakoffAlt != null) {
+        const warnTxt = `⚠ ${g.name}: breakoff needs ${g.reqBreakoffAlt.toLocaleString()}ft for ${r.openSepFt}ft sep`;
+        addL(L.marker(ll(g.breakoff), {
+          icon: L.divIcon({
+            html: `<div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;
+              color:#f87171;text-shadow:${shadow};white-space:nowrap;pointer-events:none;
+              padding-left:10px;">${warnTxt}</div>`,
+            iconSize: [340, 16], iconAnchor: [0, 8], className: '',
+          }),
+          interactive: false, zIndexOffset: 60,
+        }));
+      }
     }
   });
 
-  // Plan summary: total pass time, jump run ground speed
-  if (showLabels && r.groups.length > 1) {
-    const last = r.groups[r.groups.length - 1];
-    const passSec = Math.round(last.tExitSec);
-    const summary = `Pass ${passSec}s · GS ${r.jrGndSpdKts}kt`;
-    addL(L.marker(ll(r.openTarget), {
+  // ── Jump run line through exit points ──
+  if (showLabels && r.groups.length) {
+    const jrVec   = hdgVec(r.jrHdg);
+    const first   = r.groups[0];
+    const last    = r.groups[r.groups.length - 1];
+
+    // Extend 15% beyond first and last group exit positions along JR
+    const extFt   = 1500;
+    const jrStart = offsetLL(first.exit.lat, first.exit.lng, -jrVec.n * extFt, -jrVec.e * extFt);
+    const jrEnd   = offsetLL(last.exit.lat,  last.exit.lng,   jrVec.n * extFt,  jrVec.e * extFt);
+    addL(L.polyline([ll(jrStart), ll(jrEnd)], {
+      color: 'rgba(160,220,255,0.7)', weight: 2, dashArray: '8 5', interactive: false,
+    }));
+
+    // Direction chevron at middle exit point (center of exit circle)
+    const midGroup   = r.groups.find(g => g.isMiddle) || r.groups[Math.floor(r.groups.length / 2)];
+    const chevronSvg = `<svg width="14" height="14" viewBox="0 0 12 12" style="display:block;">
+      <polyline points="3,10 6,2 9,10" fill="none" stroke="rgba(160,220,255,0.95)"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+        transform="rotate(${r.jrHdg},6,6)"/>
+    </svg>`;
+    addL(L.marker(ll(midGroup.exit), {
+      icon: L.divIcon({ html: chevronSvg, iconSize: [14, 14], iconAnchor: [7, 7], className: '' }),
+      interactive: false, zIndexOffset: 43,
+    }));
+
+    // Jump run label: heading, ground speed, max gap between groups
+    const passSec  = Math.round(last.tExitSec);
+    const maxGap   = r.maxTDelta ? `· ${Math.round(r.maxTDelta)}s max gap` : '';
+    const jrLblPt  = offsetLL(jrEnd.lat, jrEnd.lng, jrVec.n * 300, jrVec.e * 300);
+    addL(L.marker(ll(jrLblPt), {
       icon: L.divIcon({
-        html: `<div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;
-          color:rgba(160,220,255,0.9);text-shadow:0 1px 4px #000,0 0 8px #000;white-space:nowrap;
-          pointer-events:none;text-align:center;padding-top:24px;">${summary}</div>`,
-        iconSize: [200, 16], iconAnchor: [100, 0], className: '',
+        html: `<div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;
+          color:rgba(160,220,255,1);text-shadow:${shadow};
+          white-space:nowrap;pointer-events:none;text-align:center;line-height:1.5;">
+          Jump run ${Math.round(r.jrHdg)}° · ${r.jrGndSpdKts}kt GS · ${passSec}s pass ${maxGap}
+        </div>`,
+        iconSize: [420, 22], iconAnchor: [210, 11], className: '',
       }),
-      interactive: false, zIndexOffset: 40,
+      interactive: false, zIndexOffset: 45,
     }));
   }
 
-  // fitBounds when canopy mode is off (otherwise canopy handles fit)
+  // fitBounds when canopy mode is off
   if (!state.modes.canopy && !state.fitDone) {
     const pts = [];
     r.groups.forEach(g => {
