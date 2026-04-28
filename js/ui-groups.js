@@ -1,5 +1,7 @@
 // ─── UI-GROUPS ─────────────────────────────────────────────────────────────────
 // Jump run group management: render cards, add/remove, persist state.
+// Group #1 (groups[0]) is mandatory and cannot be removed; its type drives
+// the freefall speed used by the canopy exit-ring calculation.
 // Depends on: config (GROUP_TYPES), state, storage, calculate
 
 // Group type → freefall fall rate (mph) and average glide ratio (movement only).
@@ -18,10 +20,27 @@ function renderGroups() {
   if (!container) return;
   container.innerHTML = '';
 
-  state.freefall.groups.forEach((g, idx) => {
-    const card = document.createElement('div');
-    card.className = 'group-card';
-    const isMvmt = GROUP_TYPES[g.type]?.isMovement;
+  // Render newly added groups on top (highest index first); group #1 stays at the bottom.
+  // Group #1 (groups[0]) is mandatory: no remove button.
+  // Additional groups: only the most recently added one (highest idx) shows a remove button.
+  const groups = state.freefall.groups;
+  const extras = groups.slice(1);
+  const lastExtraIdx = extras.length
+    ? Math.max(...extras.map(g => parseInt(g.id.replace('g', '')) || 0))
+    : -1;
+
+  // Build display order: newest extras first, then group #1.
+  const sortedExtras = [...extras].sort((a, b) =>
+    (parseInt(b.id.replace('g', '')) || 0) - (parseInt(a.id.replace('g', '')) || 0)
+  );
+  const displayOrder = [...sortedExtras, groups[0]].filter(Boolean);
+
+  displayOrder.forEach(g => {
+    const isMandatory = g === groups[0];
+    const groupNum    = parseInt(g.id.replace('g', '')) || 1;
+    const isMvmt      = GROUP_TYPES[g.type]?.isMovement;
+    const showRemove  = !isMandatory && groupNum === lastExtraIdx;
+
     const mvmtRow = isMvmt ? `
       <div class="group-row">
         <span class="group-field-label">Movement</span>
@@ -33,12 +52,18 @@ function renderGroups() {
     const typeOpts = Object.keys(GROUP_TYPES).map(k =>
       `<option value="${k}"${k === g.type ? ' selected' : ''}>${GROUP_TYPES[k].label}</option>`
     ).join('');
+    const removeBtn = showRemove
+      ? `<button class="leg-remove-btn" onclick="removeGroup('${g.id}')" title="Remove group">×</button>`
+      : '';
+
+    const card = document.createElement('div');
+    card.className = 'group-card';
     card.innerHTML = `
       <div class="group-row">
-        <span class="group-field-label">#${idx + 1}</span>
+        <span class="group-field-label">#${groupNum}</span>
         <input class="group-name-input" type="text" value="${g.name}" placeholder="Group name"
           oninput="setGroupField('${g.id}','name',this.value)">
-        <button class="leg-remove-btn" onclick="removeGroup('${g.id}')" title="Remove group">×</button>
+        ${removeBtn}
       </div>
       <div class="group-row">
         <span class="group-field-label">Jumpers</span>
@@ -50,6 +75,13 @@ function renderGroups() {
       ${mvmtRow}`;
     container.appendChild(card);
   });
+
+  // Reset button (mirrors Reset Pattern Legs)
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'leg-reset-btn';
+  resetBtn.textContent = 'Reset Jump Run Groups';
+  resetBtn.onclick = resetJumpRunGroups;
+  container.appendChild(resetBtn);
 }
 
 function addGroup() {
@@ -67,9 +99,26 @@ function addGroup() {
 }
 
 function removeGroup(id) {
+  // Group #1 is mandatory and cannot be removed.
+  if (id === state.freefall.groups[0]?.id) return;
   const i = state.freefall.groups.findIndex(g => g.id === id);
   if (i === -1) return;
   state.freefall.groups.splice(i, 1);
+  // Reset nextGroupIdx so that re-adding starts from 2 when only group #1 remains.
+  if (state.freefall.groups.length <= 1) {
+    state.freefall.nextGroupIdx = 2;
+  } else {
+    const maxIdx = Math.max(...state.freefall.groups.map(g => parseInt(g.id.replace('g', '')) || 0));
+    state.freefall.nextGroupIdx = maxIdx + 1;
+  }
+  renderGroups();
+  saveSettings();
+  if (state.target) calculate();
+}
+
+function resetJumpRunGroups() {
+  state.freefall.groups = [{ id: 'g1', name: 'Group 1', size: 4, type: 'FS', mvmt: 'R' }];
+  state.freefall.nextGroupIdx = 2;
   renderGroups();
   saveSettings();
   if (state.target) calculate();

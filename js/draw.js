@@ -130,8 +130,13 @@ function drawFreefallPlan() {
     const color = FREEFALL_GROUP_COLORS[gi % FREEFALL_GROUP_COLORS.length];
 
     if (showPaths) {
-      // Exit → breakoff (group center freefall path)
-      addL(L.polyline([ll(g.exit), ll(g.breakoff)], {
+      // Exit → breakoff (group center freefall path).
+      // Movement groups curve as the throw decays and lateral glide grows in;
+      // vertical groups fall nearly straight down (path collapses to ~2 points).
+      const pathLatLngs = (g.ffPath && g.ffPath.length >= 2)
+        ? g.ffPath.map(ll)
+        : [ll(g.exit), ll(g.breakoff)];
+      addL(L.polyline(pathLatLngs, {
         color, weight: 2.5, opacity: 0.85, dashArray: '6 4',
       }));
       // Breakoff → each member's opening point (tracking spread)
@@ -396,7 +401,7 @@ function drawCanopyPattern() {
     // ── Jump run line ──
     if (state.layers.jumpRun) {
       const jrVec      = hdgVec(p.jrHdg);
-      const jrRightVec = {n: jrVec.e, e: -jrVec.n}; // 90° right of heading
+      const jrRightVec = {n: -jrVec.e, e: jrVec.n}; // 90° right of heading (compass right)
 
       // Use DZ reference zero point (if set) instead of landing target for offset/green/red calcs
       const dzZeroLatEl = document.getElementById('dz-zero-lat');

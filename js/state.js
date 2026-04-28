@@ -44,17 +44,18 @@ const state = {
   },
 
   // ── Freefall mode state (jump run planner / movement planner) ──
+  // Group #1 is mandatory: cannot be removed, sets freefall speed for canopy calc.
   freefall: {
     result: null,                                                       // populated by calculateFreefallPlan()
-    groups: [],                                                         // user-defined group list (persisted)
-    nextGroupIdx: 1,
+    groups: [{ id: 'g1', name: 'Group 1', size: 4, type: 'FS', mvmt: 'R' }],
+    nextGroupIdx: 2,
   },
 };
 
 // Input IDs that are persisted to localStorage on every change
 const PERSIST_INPUTS = [
   'alt-enter', 'alt-base', 'alt-final',
-  'alt-exit', 'alt-open', 'ff-speed',
+  'alt-exit', 'alt-open',
   'jr-airspeed', 'exit-sep', 'safety-margin',
   'glide', 'canopy-speed', 'drift-thresh',
   'turn-bank',
