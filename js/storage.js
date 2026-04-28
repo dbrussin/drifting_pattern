@@ -225,24 +225,28 @@ function loadSettings() {
     const dtEl = document.getElementById('drift-thresh');
     if (dtEl && dtEl.value !== '') state.driftThresh = parseInt(dtEl.value) || 5;
 
-    // Freefall groups
+    // Freefall groups — group #1 is mandatory; ensure at least one always exists.
     const groupsStr = localStorage.getItem(storageKey('groups'));
     if (groupsStr) {
       try {
         const saved = JSON.parse(groupsStr);
         if (Array.isArray(saved)) {
-          state.freefall.groups = saved.filter(g => g && g.id && GROUP_TYPES[g.type]).map(g => ({
+          const restored = saved.filter(g => g && g.id && GROUP_TYPES[g.type]).map(g => ({
             id:   String(g.id),
             name: String(g.name ?? 'Group'),
             size: Math.max(1, Math.min(20, parseInt(g.size) || 1)),
             type: g.type,
             mvmt: g.mvmt === 'L' ? 'L' : 'R',
           }));
+          if (restored.length > 0) state.freefall.groups = restored;
         }
       } catch(e) {}
     }
-    state.freefall.nextGroupIdx = parseInt(localStorage.getItem(storageKey('next_group_idx')))
-      || (state.freefall.groups.length + 1);
+    if (!state.freefall.groups.length) {
+      state.freefall.groups = [{ id: 'g1', name: 'Group 1', size: 4, type: 'FS', mvmt: 'R' }];
+    }
+    state.freefall.nextGroupIdx = parseInt(localStorage.getItem(storageKey('next_group_idx'))) || 2;
+    if (state.freefall.nextGroupIdx < 2) state.freefall.nextGroupIdx = 2;
     if (typeof renderGroups === 'function') renderGroups();
 
     // Layer visibility — done last so setHand/setLegMode don't clobber pp_layers
