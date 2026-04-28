@@ -24,6 +24,10 @@ const DRIFT_STEP_FT      = 200;     // Riemann integration step for wind drift (
 const MIN_WIND_SPD_KT    = 0.5;     // minimum wind speed for jump-run auto-heading (kts)
 const STATUTE_MI_PER_DEG = 69;      // approximate statute miles per degree of latitude
 const MIN_AGL_FT         = 50;      // minimum AGL threshold for pressure-level wind data (ft)
+const FPS_PER_KT         = FT_PER_NM / 3600; // ≈1.6878; convert kt → ft/s
+const FPS_PER_MPH        = 5280 / 3600;      // ≈1.4667; convert mph → ft/s
+const FF_DT_SEC          = 0.1;     // freefall ODE integration step (s)
+const TRACK_GR           = 1.0;     // breakoff-to-open tracking glide ratio (1:1)
 
 // Wind cache TTL — 20 minutes
 const CACHE_MS = 20 * 60 * 1000;
