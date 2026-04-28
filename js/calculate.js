@@ -88,6 +88,99 @@ function calculate() {
   drawPattern();
 }
 
+// ── Freefall physics integrators ──────────────────────────────────────────────
+
+/**
+ * Integrate exit → breakoff trajectory under quadratic drag. Drag constant
+ * k/m = g/v_t² is inferred from the group's terminal velocity (density-corrected
+ * via tasFactor). Forward velocity along jump run starts at aircraft TAS and
+ * decays as drag pulls the jumper toward the local airmass; vertical velocity
+ * starts at 0 and approaches v_t (tanh-style profile) with the coupling
+ * speed term ‖V‖ = √(u² + v²) so forward motion slows the vertical fall.
+ *
+ * Movement groups carry a sustained lateral airmass velocity v·glide along
+ * jrPerp (no decay — represents steady aerodynamic glide).
+ *
+ * Wind drift accumulates each step using getWindAtAGL at the current altitude.
+ *
+ * @returns {{tSec, dN, dE, throwN, throwE, throwFt, vFinalFps}}
+ *   dN/dE: total ground displacement (airmass forward + drift)
+ *   throwN/E/Ft: airmass-relative forward displacement only ("throw")
+ */
+function integrateFreefallExitToBreakoff(altTopAGL, altBotAGL, vTermSL_fps,
+                                          jrAirspeedKts, jrVec, jrPerp,
+                                          lateralGlide, lateralSign) {
+  let t = 0, z = altTopAGL;
+  let u = jrAirspeedKts * tasFactor(z) * FPS_PER_KT;  // forward airspeed (along jrVec)
+  let v = 0;                                          // vertical speed (positive down)
+  let dN = 0, dE = 0;
+  let throwN = 0, throwE = 0;
+  const dt = FF_DT_SEC;
+  let safety = 0;
+  while (z > altBotAGL && safety++ < 20000) {
+    const vTermAlt = vTermSL_fps * tasFactor(z);
+    const kOverM   = G_FT_S2 / (vTermAlt * vTermAlt);
+    const speed    = Math.sqrt(u * u + v * v);
+    const a_v      = G_FT_S2 - kOverM * v * speed;
+    const a_u      = -kOverM * u * speed;
+    let stepSec    = dt;
+    if (v > 0) {
+      const remaining = z - altBotAGL;
+      if (v * dt > remaining) stepSec = remaining / v;
+    }
+    const lat   = lateralGlide ? v * lateralGlide * lateralSign : 0;
+    const w     = getWindAtAGL(z);
+    const fwdN  = jrVec.n * u + jrPerp.n * lat;
+    const fwdE  = jrVec.e * u + jrPerp.e * lat;
+    throwN     += fwdN * stepSec;
+    throwE     += fwdE * stepSec;
+    dN         += (fwdN + w.n * FPS_PER_KT) * stepSec;
+    dE         += (fwdE + w.e * FPS_PER_KT) * stepSec;
+    v += a_v * stepSec;
+    u += a_u * stepSec;
+    if (u < 0) u = 0;
+    z -= v * stepSec;
+    t += stepSec;
+  }
+  return {
+    tSec: t,
+    dN, dE,
+    throwN, throwE,
+    throwFt: Math.sqrt(throwN * throwN + throwE * throwE),
+    vFinalFps: v,
+  };
+}
+
+/**
+ * Integrate breakoff → opening for a single tracking jumper. Vertical speed is
+ * held at terminal v_t(z) (density-corrected); horizontal motion is along
+ * trackHdg at v_t × trackGR (sustained aerodynamic glide). Wind drift
+ * integrates each altitude step.
+ *
+ * @returns {{tSec, dN, dE, trackN, trackE}}
+ */
+function integrateTrackToOpening(altTopAGL, altBotAGL, vTermSL_fps, trackHdgDeg, trackGR) {
+  let t = 0, z = altTopAGL;
+  let dN = 0, dE = 0, trackN = 0, trackE = 0;
+  const tVec = hdgVec(trackHdgDeg);
+  let safety = 0;
+  while (z > altBotAGL && safety++ < 20000) {
+    const vTermAlt = vTermSL_fps * tasFactor(z);
+    const remaining = z - altBotAGL;
+    const dz       = Math.min(vTermAlt * FF_DT_SEC, remaining);
+    const stepSec  = dz / vTermAlt;
+    const horizFps = vTermAlt * trackGR;
+    const w        = getWindAtAGL(z - dz / 2);
+    trackN += tVec.n * horizFps * stepSec;
+    trackE += tVec.e * horizFps * stepSec;
+    dN     += (tVec.n * horizFps + w.n * FPS_PER_KT) * stepSec;
+    dE     += (tVec.e * horizFps + w.e * FPS_PER_KT) * stepSec;
+    z -= dz;
+    t += stepSec;
+  }
+  return { tSec: t, dN, dE, trackN, trackE };
+}
+
 // ── Freefall (jump run) planner ───────────────────────────────────────────────
 
 /**
@@ -100,13 +193,14 @@ function calculate() {
  * group opens over the spot. Subsequent groups exit later in the pass, so their
  * opening centers move further down the jump run.
  *
- * Tracking model (breakoff → opening, fixed 1000 ft band, 1:1 GR = 1000 ft horizontal):
- *  · Vertical formations (FS/VFS/Student/Tandem): jumpers radiate evenly around 360°
- *    from group center. Solo (size=1) does not track.
- *  · Movement: leader continues along group heading; others fan ±45° from heading.
- *
- * Exit-throw: simple decay model — TAS_fps × τ with τ ≈ 2 sec; this approximates
- * the integrated forward distance until horizontal velocity matches the airmass.
+ * Physics (see integrateFreefallExitToBreakoff and integrateTrackToOpening):
+ *  · Exit→breakoff: quadratic drag with k/m = g/v_t², coupled forward+vertical ODE,
+ *    integrated at FF_DT_SEC steps. Initial forward speed = aircraft TAS at exit.
+ *    Movement groups carry sustained lateral airmass velocity v·glide along jrPerp.
+ *  · Breakoff→opening: per-member track at terminal vertical (density-corrected),
+ *    horizontal at v_t × TRACK_GR along each member's chosen heading. Vertical
+ *    formations radiate 360° from group center; movement = leader along group
+ *    heading, others fan ±45°. Solo (size=1) does not track.
  */
 function calculateFreefallPlan() {
   const groups = state.freefall.groups;
@@ -154,84 +248,82 @@ function calculateFreefallPlan() {
   const jrTAS      = jrAirspeedKts * tasFactor(altExit);
   const jrAlongWC  = wJr.n * jrVec.n + wJr.e * jrVec.e;
   const jrGndSpdKts = Math.max(1, jrTAS + jrAlongWC);
-  const jrGndSpdFps = jrGndSpdKts * FT_PER_NM / 3600;
+  const jrGndSpdFps = jrGndSpdKts * FPS_PER_KT;
 
   // Anchor: landing target is where group #1 opens.
   const openTarget = state.target;
 
-  // Tracking distance (1:1 glide, breakoff→open vertical = 1000 ft fixed).
-  const trackDistFt = breakoffAlt - altOpen;
-
-  // Per-jumper offsets relative to group center at opening alt.
-  function memberOpeningOffsets(g) {
-    if (g.size <= 1) return [{ dN: 0, dE: 0, hdg: null }];
+  // Per-member tracking heading list for a group (used for breakoff→open integration).
+  function memberTrackHeadings(g) {
+    if (g.size <= 1) return [null];
     const t = GROUP_TYPES[g.type];
     if (t.isMovement) {
       const groupHdgDeg = ((jrHdg + (g.mvmt === 'L' ? -90 : 90)) + 360) % 360;
-      const offsets     = [];
-      const leaderVec   = hdgVec(groupHdgDeg);
-      offsets.push({ dN: leaderVec.n * trackDistFt, dE: leaderVec.e * trackDistFt, hdg: groupHdgDeg });
-      const remaining = g.size - 1;
+      const hdgs        = [groupHdgDeg];
+      const remaining   = g.size - 1;
       for (let i = 0; i < remaining; i++) {
-        const frac     = remaining === 1 ? 0 : i / (remaining - 1);
-        const offDeg   = -45 + frac * 90;
-        const memberHdg = (groupHdgDeg + offDeg + 360) % 360;
-        const v        = hdgVec(memberHdg);
-        offsets.push({ dN: v.n * trackDistFt, dE: v.e * trackDistFt, hdg: memberHdg });
+        const frac    = remaining === 1 ? 0 : i / (remaining - 1);
+        const offDeg  = -45 + frac * 90;
+        hdgs.push((groupHdgDeg + offDeg + 360) % 360);
       }
-      return offsets;
+      return hdgs;
     }
-    // Vertical formation: distribute radially around center
-    const offsets = [];
-    for (let i = 0; i < g.size; i++) {
-      const angDeg = (i * 360) / g.size;
-      const v      = hdgVec(angDeg);
-      offsets.push({ dN: v.n * trackDistFt, dE: v.e * trackDistFt, hdg: angDeg });
-    }
-    return offsets;
+    const hdgs = [];
+    for (let i = 0; i < g.size; i++) hdgs.push((i * 360) / g.size);
+    return hdgs;
   }
 
-  // Per-group plan: physics constants for one group.
+  // Per-group plan: physics-integrated trajectories from exit → breakoff → open.
   const plan = groups.map(g => {
-    const t      = GROUP_TYPES[g.type];
-    const ffRate = t.fallMph * 88; // ft/min
-    const dToBreakoff = integratedDrift(altExit, breakoffAlt, ffRate);
-    const dToOpen     = integratedDrift(breakoffAlt, altOpen, ffRate);
-    let movementN = 0, movementE = 0;
-    if (t.isMovement) {
-      const horizFt = (altExit - breakoffAlt) * t.glide;
-      const sign    = g.mvmt === 'L' ? -1 : 1;
-      movementN = sign * jrPerp.n * horizFt;
-      movementE = sign * jrPerp.e * horizFt;
-    }
-    const throwFt   = jrTAS * 1.689 * 2; // TAS_fps × τ (2 sec time constant)
-    const throwN    = jrVec.n * throwFt;
-    const throwE    = jrVec.e * throwFt;
+    const t          = GROUP_TYPES[g.type];
+    const vTermSL    = t.fallMph * FPS_PER_MPH;
+    const latSign    = t.isMovement ? (g.mvmt === 'L' ? -1 : 1) : 0;
+    const latGlide   = t.isMovement ? t.glide : 0;
+    const ff         = integrateFreefallExitToBreakoff(
+                         altExit, breakoffAlt, vTermSL,
+                         jrAirspeedKts, jrVec, jrPerp, latGlide, latSign);
+    const trackHdgs  = memberTrackHeadings(g);
+    const memberLegs = trackHdgs.map(hdg => {
+      if (hdg === null) return { dN: 0, dE: 0, tSec: 0, hdg: null };
+      const tr = integrateTrackToOpening(breakoffAlt, altOpen, vTermSL, hdg, TRACK_GR);
+      return { dN: tr.dN, dE: tr.dE, tSec: tr.tSec, hdg };
+    });
     return {
       def: g,
-      tFreefallSec: ((altExit - breakoffAlt) / ffRate) * 60,
-      tBreakoffSec: ((breakoffAlt - altOpen) / ffRate) * 60,
-      driftToBreakoffN: dToBreakoff.dN, driftToBreakoffE: dToBreakoff.dE,
-      driftToOpenN:     dToOpen.dN,     driftToOpenE:     dToOpen.dE,
-      movementN, movementE,
-      throwN, throwE,
-      throwFt,
-      memberOffsets: memberOpeningOffsets(g),
+      tFreefallSec: ff.tSec,
+      tBreakoffSec: memberLegs[0].tSec,
+      breakoffDispN: ff.dN, breakoffDispE: ff.dE,    // exit → breakoff (incl. drift + throw)
+      throwN: ff.throwN,    throwE: ff.throwE,       // airmass-only forward + lateral
+      throwFt: ff.throwFt,
+      memberLegs,                                    // per-member breakoff → open vector
     };
   });
 
-  // exit + throw + drift_to_breakoff + movement + drift_to_open = open center
+  // Average member breakoff→open displacement: used to back-solve where the
+  // group must exit so its members open (averaged) over the desired open point.
+  function avgMemberOpenDisp(p) {
+    const n = p.memberLegs.length;
+    let sN = 0, sE = 0;
+    p.memberLegs.forEach(m => { sN += m.dN; sE += m.dE; });
+    return { dN: sN / n, dE: sE / n };
+  }
+
   function exitOffsetForOpen(p, openDispN, openDispE) {
+    const avg = avgMemberOpenDisp(p);
     return {
-      dN: openDispN - (p.throwN + p.driftToBreakoffN + p.movementN + p.driftToOpenN),
-      dE: openDispE - (p.throwE + p.driftToBreakoffE + p.movementE + p.driftToOpenE),
+      dN: openDispN - (p.breakoffDispN + avg.dN),
+      dE: openDispE - (p.breakoffDispE + avg.dE),
     };
   }
 
   function memberOpenPositions(p, exitN, exitE) {
-    const ctrN = exitN + p.throwN + p.driftToBreakoffN + p.movementN + p.driftToOpenN;
-    const ctrE = exitE + p.throwE + p.driftToBreakoffE + p.movementE + p.driftToOpenE;
-    return p.memberOffsets.map(off => ({ dN: ctrN + off.dN, dE: ctrE + off.dE, hdg: off.hdg }));
+    const breakoffN = exitN + p.breakoffDispN;
+    const breakoffE = exitE + p.breakoffDispE;
+    return p.memberLegs.map(m => ({
+      dN: breakoffN + m.dN,
+      dE: breakoffE + m.dE,
+      hdg: m.hdg,
+    }));
   }
 
   // ── Resolve group exit positions and timing ──
@@ -276,10 +368,12 @@ function calculateFreefallPlan() {
 
   // Build renderer-ready result with lat/lng positions.
   const renderedGroups = plan.map(p => {
-    const breakoffN = p.exitN + p.throwN + p.driftToBreakoffN + p.movementN;
-    const breakoffE = p.exitE + p.throwE + p.driftToBreakoffE + p.movementE;
-    const openN     = breakoffN + p.driftToOpenN;
-    const openE     = breakoffE + p.driftToOpenE;
+    const breakoffN = p.exitN + p.breakoffDispN;
+    const breakoffE = p.exitE + p.breakoffDispE;
+    const avg       = avgMemberOpenDisp(p);
+    const openN     = breakoffN + avg.dN;
+    const openE     = breakoffE + avg.dE;
+    const isMv      = GROUP_TYPES[p.def.type].isMovement;
     return {
       id:         p.def.id,
       name:       p.def.name,
@@ -295,11 +389,11 @@ function calculateFreefallPlan() {
       exit:       offsetLL(openTarget.lat, openTarget.lng, p.exitN,    p.exitE),
       breakoff:   offsetLL(openTarget.lat, openTarget.lng, breakoffN,  breakoffE),
       openCenter: offsetLL(openTarget.lat, openTarget.lng, openN,      openE),
-      members:    p.memberOffsets.map((off, mi) => ({
-        opening:  offsetLL(openTarget.lat, openTarget.lng, openN + off.dN, openE + off.dE),
+      members:    p.memberLegs.map((m, mi) => ({
+        opening:  offsetLL(openTarget.lat, openTarget.lng, breakoffN + m.dN, breakoffE + m.dE),
         breakoff: offsetLL(openTarget.lat, openTarget.lng, breakoffN, breakoffE),
-        hdg:      off.hdg,
-        isLeader: mi === 0 && GROUP_TYPES[p.def.type].isMovement,
+        hdg:      m.hdg,
+        isLeader: mi === 0 && isMv,
       })),
     };
   });
