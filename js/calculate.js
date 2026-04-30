@@ -287,8 +287,16 @@ function calculateFreefallPlan() {
   const midVSpeedMph   = midGroup.vSpeedMph   ?? GROUP_TYPES[midGroup.type]?.fallMph ?? 120;
   const midFfRateFtMin = midVSpeedMph * 88;
   const midDriftAnchor = integratedDrift(altExit, midOpenAlt, midFfRateFtMin);
-  let   jrBaseN        = -midDriftAnchor.dN;
-  let   jrBaseE        = -midDriftAnchor.dE;
+  // When canopy mode is on, open the middle group at the canopy's opening circle center
+  // so both modes share the same opening circle. Freefall-only: open at the target.
+  let anchorN = 0, anchorE = 0;
+  if (state.modes.canopy && state.canopy.result?.openCtr) {
+    const oc = state.canopy.result.openCtr;
+    anchorN = (oc.lat - openTarget.lat) * R_FT * D2R;
+    anchorE = (oc.lng - openTarget.lng) * R_FT * Math.cos(openTarget.lat * D2R) * D2R;
+  }
+  let   jrBaseN        = anchorN - midDriftAnchor.dN;
+  let   jrBaseE        = anchorE - midDriftAnchor.dE;
 
   // Apply manual JR offset (perpendicular shift)
   const jrOffsetEl = document.getElementById('jr-offset');
@@ -923,6 +931,15 @@ function calculateCanopyPattern() {
   const dWC = {along: dwAlong, cross: dwCross};
   const bWC = {along: bAlong,  cross: bCross};
 
+  // Opening and exit circle centers — shared with freefall mode when both are active.
+  const topEntryPt  = extraLegResults.length ? extraLegResults[extraLegResults.length - 1].entry  : entry;
+  const topAltEntry = extraLegResults.length ? extraLegResults[extraLegResults.length - 1].altTop : altE;
+  const openDrift   = integratedDrift(altOpen, topAltEntry, dRateF);
+  const openCtr     = offsetLL(topEntryPt.lat, topEntryPt.lng, -openDrift.dN, -openDrift.dE);
+  const ffRateFtMin = ffSpeedMph * 88;
+  const ffDrift     = integratedDrift(altExit, altOpen, ffRateFtMin);
+  const exitCenter  = offsetLL(openCtr.lat, openCtr.lng, -ffDrift.dN, -ffDrift.dE);
+
   state.canopy.result = {
     entry, tBase, tFinal, landing: state.target,
     tBaseTurnStart, tFinalTurnStart,
@@ -946,5 +963,6 @@ function calculateCanopyPattern() {
     isZPattern,
     fieldElevFt: state.fieldElevFt,
     extraLegs: extraLegResults,
+    openCtr, exitCenter,
   };
 }

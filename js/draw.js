@@ -430,12 +430,9 @@ function drawCanopyPattern() {
 
     // ── Shared geometry (used by multiple layers) ──
     const canopyRange  = p.altOpen - topAltAGL;
-    const openDrift    = integratedDrift(p.altOpen, topAltAGL, dRate);
     const openRadiusFt = canopyRange * p.glide;
-    const openCtr      = offsetLL(topEntry.lat, topEntry.lng, -openDrift.dN, -openDrift.dE);
-    const ffRateFtMin2 = p.ffSpeedMph * 88;
-    const ffDrift2     = integratedDrift(p.altExit, p.altOpen, ffRateFtMin2);
-    const exitCenter   = offsetLL(openCtr.lat, openCtr.lng, -ffDrift2.dN, -ffDrift2.dE);
+    const openCtr      = p.openCtr;
+    const exitCenter   = p.exitCenter;
 
     // ── Canopy entry rings + opening ring ──
     if (state.layers.canopyRegions) {
