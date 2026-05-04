@@ -208,6 +208,7 @@ function updateJrPyramid() {
   const intoWindHdg = (windVelDir + 180) % 360;
   const slider  = document.getElementById('jr-hdg-slider');
   const trackW  = slider.clientWidth;
+  if (trackW <= 0) return;  // slider hidden (settings tray closed); skip — refreshed on open
   const thumbR  = 14;
   const pct     = ((thumbR + (intoWindHdg / 359) * (trackW - 2 * thumbR)) / trackW) * 100;
   pyr.style.left       = pct + '%';
