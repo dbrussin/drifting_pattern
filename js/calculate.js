@@ -133,10 +133,14 @@ function integrateFreefallExitToBreakoff(altTopAGL, altBotAGL, vTermSL_fps,
   const dt = FF_DT_SEC;
   // Sample positions every ~500 ft of descent so movement-group paths can be
   // rendered as a curve (forward throw decays while lateral glide grows in).
-  const SAMPLE_FT      = 500;
-  const pathPoints     = [{ dN: 0, dE: 0, alt: altTopAGL }];
-  let   nextSampleAlt  = altTopAGL - SAMPLE_FT;
-  let   safety         = 0;
+  // For movement groups an extra sample is injected at the straight→lateral
+  // transition (MVMT_STRAIGHT_SEC) so the first rendered segment is a clean
+  // along-JR line rather than a blend of straight + early lateral glide.
+  const SAMPLE_FT          = 500;
+  const pathPoints         = [{ dN: 0, dE: 0, alt: altTopAGL }];
+  let   nextSampleAlt      = altTopAGL - SAMPLE_FT;
+  let   straightSampled    = !lateralGlide;  // non-movement groups skip this
+  let   safety             = 0;
   while (z > altBotAGL && safety++ < 20000) {
     const vTermAlt = vTermSL_fps * tasFactor(z);
     const kOverM   = G_FT_S2 / (vTermAlt * vTermAlt);
@@ -148,7 +152,7 @@ function integrateFreefallExitToBreakoff(altTopAGL, altBotAGL, vTermSL_fps,
       const remaining = z - altBotAGL;
       if (v * dt > remaining) stepSec = remaining / v;
     }
-    const lat   = lateralGlide ? v * lateralGlide * lateralSign : 0;
+    const lat   = (lateralGlide && t >= MVMT_STRAIGHT_SEC) ? v * lateralGlide * lateralSign : 0;
     const w     = getWindAtAGL(z);
     const fwdN  = jrVec.n * u + jrPerp.n * lat;
     const fwdE  = jrVec.e * u + jrPerp.e * lat;
@@ -161,6 +165,11 @@ function integrateFreefallExitToBreakoff(altTopAGL, altBotAGL, vTermSL_fps,
     if (u < 0) u = 0;
     z -= v * stepSec;
     t += stepSec;
+    // Inject transition sample at the straight→lateral boundary
+    if (!straightSampled && t >= MVMT_STRAIGHT_SEC) {
+      pathPoints.push({ dN, dE, alt: z });
+      straightSampled = true;
+    }
     if (z <= nextSampleAlt && z > altBotAGL) {
       pathPoints.push({ dN, dE, alt: z });
       nextSampleAlt -= SAMPLE_FT;
@@ -260,12 +269,10 @@ function calculateFreefallPlan() {
     } else {
       jrHdg = 0;
     }
-    if (!state.canopy.result) {
-      const dEl = document.getElementById('jr-hdg-display');
-      const sEl = document.getElementById('jr-hdg-slider');
-      if (dEl) dEl.value = Math.round(jrHdg);
-      if (sEl) sEl.value = Math.round(jrHdg);
-    }
+    const dEl = document.getElementById('jr-hdg-display');
+    const sEl = document.getElementById('jr-hdg-slider');
+    if (dEl) dEl.value = Math.round(jrHdg);
+    if (sEl) sEl.value = Math.round(jrHdg);
   }
 
   const jrVec  = hdgVec(jrHdg);
@@ -275,8 +282,9 @@ function calculateFreefallPlan() {
   const wJr         = getWindAtAGL(altExit);
   const jrTAS       = jrAirspeedKts * tasFactor(altExit);
   const jrAlongWC   = wJr.n * jrVec.n + wJr.e * jrVec.e;
-  const jrGndSpdKts = Math.max(1, jrTAS + jrAlongWC);
-  const jrGndSpdFps = jrGndSpdKts * FPS_PER_KT;
+  const jrGndSpdKts  = Math.max(1, jrTAS + jrAlongWC);
+  const jrGndSpdFps  = jrGndSpdKts * FPS_PER_KT;
+  const minExitGapFt = jrGndSpdFps * MIN_EXIT_GAP_SEC;
 
   const openTarget  = state.target;
 
@@ -315,16 +323,30 @@ function calculateFreefallPlan() {
     const t = GROUP_TYPES[g.type];
     if (t.isMovement) {
       const groupHdgDeg = ((jrHdg + (g.mvmt === 'L' ? -90 : 90)) + 360) % 360;
-      const hdgs = [];
-      for (let i = 0; i < g.size; i++) {
-        const frac   = g.size === 1 ? 0.5 : i / (g.size - 1);
-        const offDeg = -45 + frac * 90;
-        hdgs.push((groupHdgDeg + offDeg + 360) % 360);
-      }
+      // Leader (index 0) always at movement heading (0° offset).
+      // nRight = ceil((N-1)/2) others go to the positive side, nLeft to the negative.
+      // Step = 45°/nRight → furthest positive member is exactly +45°, all gaps uniform.
+      // For even N nRight > nLeft so more members are on the positive side.
+      const nRight = Math.ceil((g.size - 1) / 2);
+      const nLeft  = g.size - 1 - nRight;
+      const step   = nRight > 0 ? 45 / nRight : 45;
+      const hdgs   = [groupHdgDeg];
+      for (let i = nLeft; i >= 1; i--) hdgs.push((groupHdgDeg - i * step + 360) % 360);
+      for (let i = 1; i <= nRight; i++) hdgs.push((groupHdgDeg + i * step + 360) % 360);
       return hdgs;
     }
+    // Split fan: ceil(N/2) members on the right half-circle (0°–180° excl.),
+    // floor(N/2) on the left (180°–360° excl.), each side half-step offset from axis.
+    // Guarantees no member tracks within 90°/ceil(N/2) of 0° or 180° (along JR).
+    //   N=2 → 90°, 270°   N=3 → 45°, 135°, 270°   N=4 → 45°, 135°, 225°, 315°
+    //   N=5 → 30°, 90°, 150°, 225°, 315°   N=6 → 30°, 90°, 150°, 210°, 270°, 330°
     const hdgs = [];
-    for (let i = 0; i < g.size; i++) hdgs.push((i * 360) / g.size);
+    const rightCount = Math.ceil(g.size / 2);
+    const leftCount  = g.size - rightCount;
+    for (let i = 0; i < rightCount; i++)
+      hdgs.push((jrHdg + (2 * i + 1) * 90 / rightCount + 360) % 360);
+    for (let j = 0; j < leftCount; j++)
+      hdgs.push((jrHdg + 180 + (2 * j + 1) * 90 / leftCount + 360) % 360);
     return hdgs;
   }
 
@@ -355,12 +377,12 @@ function calculateFreefallPlan() {
       const trackBand = (breakoffAlt - openAlt) * TRACK_GR;
       let halfAngle;
       if (t.isMovement) {
-        // members span ±45° (total 90°) evenly; adjacent angular gap = 90/(N-1)°
-        const angGapDeg = g.size === 2 ? 90 : 90 / (g.size - 1);
-        halfAngle = (angGapDeg / 2) * D2R;
+        // step = 45/nRight (matches memberTrackHeadings); halfAngle = step/2.
+        const nRight = Math.ceil((g.size - 1) / 2);
+        halfAngle = nRight > 0 ? (22.5 / nRight) * D2R : 0;
       } else {
-        // members spread 360°/N apart
-        halfAngle = Math.PI / g.size;
+        // Split fan: min inter-member gap = 360°/(N+1) for odd N, 360°/N for even N.
+        halfAngle = Math.PI / (g.size % 2 === 0 ? g.size : g.size + 1);
       }
       const sin_h = Math.sin(halfAngle);
       if (sin_h > 0) {
@@ -455,9 +477,10 @@ function calculateFreefallPlan() {
       if (minSepFromPlaced(plan[i], mid) >= openSepFt) hi = mid;
       else lo = mid;
     }
-    exitOffsets[i]   = hi;
+    // Enforce minimum exit time gap (4 s) in addition to opening separation
+    exitOffsets[i]   = Math.max(hi, prevOff + minExitGapFt);
     plan[i]._placed  = true;
-    plan[i]._openPos = memberOpenPosAtOffset(plan[i], hi);
+    plan[i]._openPos = memberOpenPosAtOffset(plan[i], exitOffsets[i]);
   }
 
   // Left wing: exit earlier, more downwind → decreasing (more negative) offset
@@ -469,10 +492,16 @@ function calculateFreefallPlan() {
       if (minSepFromPlaced(plan[i], mid) >= openSepFt) lo = mid;
       else hi = mid;
     }
-    exitOffsets[i]   = lo;
+    // Enforce minimum exit time gap (4 s) in addition to opening separation
+    exitOffsets[i]   = Math.min(lo, nextOff - minExitGapFt);
     plan[i]._placed  = true;
-    plan[i]._openPos = memberOpenPosAtOffset(plan[i], lo);
+    plan[i]._openPos = memberOpenPosAtOffset(plan[i], exitOffsets[i]);
   }
+
+  // Center the full first→last exit span in the exit circle (jrBase becomes the midpoint
+  // of the span rather than the anchor for the middle group alone).
+  const spanCenter = (exitOffsets[0] + exitOffsets[plan.length - 1]) / 2;
+  for (let i = 0; i < exitOffsets.length; i++) exitOffsets[i] -= spanCenter;
 
   // Apply solved offsets → exit positions, member opening positions, timing
   plan.forEach((p, i) => {
